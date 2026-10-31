@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "removeComments": false,
+    "sourceMap": false,
+    "rootDir": "./src",
+    "outDir": "./build/"
+  },
+  "include": [
+    "src/lighting/**/*"
+  ]
+}

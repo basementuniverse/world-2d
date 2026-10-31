@@ -1,0 +1,75 @@
+import { vec } from '@basementuniverse/vec';
+import { v4 as uuid } from 'uuid';
+import { CircleCaster, CircleCasterOptions } from '../../lighting';
+import { LightingScene } from '../scenes/LightingScene';
+import { EditorActor } from './EditorActor';
+
+export class CircleShadowCasterActor extends EditorActor {
+  public readonly type = 'CircleShadowCaster';
+  public readonly object: CircleCaster;
+
+  protected readonly debugColour = '#c33';
+  protected readonly debugHoverColour = '#f44';
+  protected readonly minSize = vec(16, 16);
+  protected readonly maxSize = vec(256, 256);
+
+  public anchor: vec = vec(0.5, 0.9);
+  public minShadowDistance: number = 5;
+  public maxShadowDistance: number | null = 20;
+  public alpha: number = 1;
+
+  public constructor(
+    scene: LightingScene,
+    data: Partial<CircleShadowCasterActor> = {}
+  ) {
+    super(scene);
+
+    Object.assign(this, data, {
+      id: data.id ?? uuid().split('-')[0],
+    });
+
+    this.object = scene.lightingSystem.addCircleCaster(this.objectOptions());
+
+    this.folder = this.createFolder();
+    this.folder.add(this.anchor, 'x').name('anchor x');
+    this.folder.add(this.anchor, 'y').name('anchor y');
+    this.folder.add(this, 'minShadowDistance');
+    this.folder.add(this, 'maxShadowDistance');
+    this.folder.add(this, 'alpha', 0, 1, 0.01);
+  }
+
+  private objectOptions(): CircleCasterOptions {
+    return {
+      position: this.position,
+      size: this.size,
+      anchor: this.anchor,
+      minShadowDistance: this.minShadowDistance,
+      maxShadowDistance: this.maxShadowDistance,
+      alpha: this.alpha,
+    };
+  }
+
+  protected sync() {
+    this.object.set(this.objectOptions());
+  }
+
+  public serialise(): any {
+    return {
+      type: this.type,
+      id: this.id,
+      position: this.position,
+      size: this.size,
+      anchor: this.anchor,
+      minShadowDistance: this.minShadowDistance,
+      maxShadowDistance: this.maxShadowDistance,
+      alpha: this.alpha,
+    };
+  }
+
+  public static deserialise(
+    scene: LightingScene,
+    data: any
+  ): CircleShadowCasterActor {
+    return new CircleShadowCasterActor(scene, data);
+  }
+}

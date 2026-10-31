@@ -38,65 +38,120 @@ npm run start
 
 6. To view the sample scene (the one in the preview image), click "Import state from JSON" (in the menu, top-right) and paste in the contents of `samples/sample-scene-1.json`
 
+## Project structure
+
+* `src/lighting` is the library, it builds to `build/index.js` and doesn't depend on the demo
+* `src/demo` is the editor shown in the preview, it builds to `build/game.js` and is a good example of how to use the library
+
+Run `npm run build` to build both.
+
 ## How to integrate it into your game
 
-A scene consists of shadow casters, shadow receivers, and lights.
+A scene consists of ground, walls, actors, and lights. You add each of these to a `LightingSystem` once, and then render it every frame.
 
 First, we create a `LightingSystem`:
 
 ```ts
-const lightingSystem: LightingSystem = new LightingSystem();
-lightingSystem.initialise();
+import { LightingSystem } from 'lighting-2d';
+
+const lighting = new LightingSystem({
+  ambientLightColour: '#555',
+});
 ```
 
-(see `src/LightingSystem.ts` for options you can pass to the `LightingSystem`)
+(see `src/lighting/LightingSystem.ts` for options you can pass to the `LightingSystem`)
 
-For normal mapping and specular mapping, pass `shaderEnabled: true` and the shader source as `shader`. Each light that uses the shader needs its own WebGL context and browsers limit how many can be active, so only the first `maxShaderLights` lights (12 by default) are shaded.
-
-Implement the `CircleShadowCaster`, `RegionShadowCaster`, `SpriteShadowCaster`, `GroundShadowReceiver`, and `WallShadowReceiver` interfaces on your game object classes as appropriate.
-
-If you want normal mapping and specular mapping, implement the `NormalMappable` and `SpecularMappable` interfaces as well.
-
-Lights can be added to the lighting system like so:
+Then we add things to the scene. Each of the `add...()` methods returns an object that can be used to change or remove it later on.
 
 ```ts
-lightingSystem.lights.push(new Light(scene, lightingSystem, {
-  position: vec(100, 100),
-  radius: 100,
+lighting.addGround({
+  position: vec(0, 0),
+  size: vec(800, 600),
+  image: groundImage,
+});
+
+// Creates a lit front face, an unlit top, and a footprint that casts shadows
+lighting.addWall({
+  footprint: { position: vec(100, 100), size: vec(48, 48) },
+  height: 48,
+  image: wallImage,
+  top: { image: wallTopImage },
+});
+
+// Creates a surface that receives light, and a shadow based on the image
+const hero = lighting.addActor({
+  position: vec(200, 200),
+  size: vec(32, 48),
+  image: heroImage,
+});
+
+const torch = lighting.addLight({
+  position: vec(250, 250),
+  radius: 200,
   colour: 'white',
-  intensity: 0.5,
-}));
+});
 ```
 
-(`scene` is the `LightingScene` that owns the light, it's used for mouse interaction in the demo)
-
-Update the lighting system every frame:
+Every frame, update anything that has moved and render the scene:
 
 ```ts
-lightingSystem.update(dt);
+hero.moveTo(player.position);
+torch.radius = 180 + Math.sin(time) * 20;
+
+lighting.render(context, camera);
 ```
 
-This will update each light.
+The camera can be a [@basementuniverse/camera](https://www.npmjs.com/package/@basementuniverse/camera), or any object with `bounds`, `worldToScreen()`, and `setTransforms()`.
 
-Next, prepare the lightmap every frame (usually this should be inside the `draw()` function):
+By default, `render()` will draw everything that was added to the `LightingSystem`. If you want to draw the scene yourself, pass in a callback. It will be called with the camera's transforms applied:
 
 ```ts
-lightingSystem.drawSceneNormalMap(camera, normalMappables);
-lightingSystem.drawSceneSpecularMap(camera, specularMappables);
-lightingSystem.prepare(
-  camera,
-  groundShadowReceivers,
-  wallShadowReceivers,
-  regionShadowCasters,
-  spriteShadowCasters,
-  circleShadowCasters
-);
+lighting.render(context, camera, context => {
+  drawMyScene(context);
+});
 ```
 
-Render the scene as usual. Finally, overlay the lightmap onto the scene:
+### Normal maps and specular maps
+
+Pass `shaderEnabled: true` to the `LightingSystem`, and add a `normalMap` and `specularMap` image to anything that needs one.
+
+Each light that uses the shader needs its own WebGL context and browsers limit how many can be active, so only the first `maxShaderLights` lights (12 by default) are shaded.
+
+### Masks and shadows
+
+Masks and sprite shadows are generated automatically from an image's alpha channel, so you only need to provide a `mask` or `shadow` image if you want something different.
+
+### Changing and removing things
+
+Everything that's returned from an `add...()` method has `moveTo()` and `remove()`. Surfaces and casters also have `resize()` and `set()`, for example `surface.set({ colour: 'red' })`.
+
+An `Actor` or `Wall` is made from several smaller objects, which are available as `actor.surface` and `actor.caster`, or `wall.front`, `wall.top`, and `wall.caster`.
+
+Lights have `radius`, `colour`, `coreRadius`, `intensity`, and `castShadows` properties which can be changed at any time.
+
+### Optimising level geometry
+
+If your level is made from a lot of small tiles, you can merge neighbouring walls after adding them:
 
 ```ts
-lightingSystem.draw(context);
+lighting.optimise();
+```
+
+Merged objects can't be moved or removed afterwards, so this is only useful for level geometry. Set `mergeable: false` to exclude an object. Surfaces with a non-repeating image are never merged, because the image would be stretched.
+
+### Drawing unusual objects
+
+If something isn't a single image, you can replace any of the drawing steps for a surface:
+
+```ts
+lighting.addWallReceiver({
+  position: vec(100, 100),
+  size: vec(32, 32),
+  customDraw: {
+    image: context => drawMyObject(context),
+    normalMap: context => drawMyObjectNormals(context),
+  },
+});
 ```
 
 ## How it works
@@ -109,13 +164,14 @@ lightingSystem.draw(context);
 > }
 > ```
 
+`addWall()` and `addActor()` are built from the shadow casters and shadow receivers described below. You can also add these directly if you need more control. This is what the demo does.
+
 Shadow casters can be one of:
 
-#### `RegionShadowCaster`
+#### `addRegionCaster()`
 
 This is a rectangle that casts polygonal shadows.
 
-* `id: string` a unique identifier
 * `position: vec` the position of the shadow caster
 * `size: vec` the size of the shadow caster (axis-aligned rectangle)
 * `includeRegionShadow: boolean` when casting shadows, should we include the rectangular region of the shadow caster?
@@ -130,68 +186,68 @@ e.g.
 
 <img src="docs/region-shadow-caster-include-true.png" width="40%" border="1" />
 
-#### `SpriteShadowCaster`
+#### `addSpriteCaster()`
 
-This is a rectangle with a sprite name. The sprite will be rotated and stretched when casting shadows.
+This is a rectangle with an image. The image will be rotated and stretched when casting shadows.
 
 <img src="docs/sprite-shadow-caster.png" width="20%" border="1" />
 
-* `id: string` a unique identifier
 * `position: vec` the position of the shadow caster
 * `size: vec` the size of the shadow caster (axis-aligned rectangle), this will be used as the size of the sprite
-* `shadowName: string` the name of the sprite used for casting shadows
+* `shadow: image` the image used for casting shadows
+* `image: image` if `shadow` isn't set, the silhouette of this image will be used instead
 * `anchor: vec` the anchor point of the sprite where (0, 0) is the top-left corner, (0.5, 0.5) is the center, (1, 1) is the bottom-right corner
 * `offset: vec` used to offset the sprite from the anchor position
 * `minShadowLength: number` the minimum length of the shadow
 * `maxShadowLength: number` the maximum length of the shadow
 
-We use a smoothstep interpolation to make the shadow length vary between `minShadowLength` and `maxShadowLength` based on the distance between the light and the `SpriteShadowCaster`.
+We use a smoothstep interpolation to make the shadow length vary between `minShadowLength` and `maxShadowLength` based on the distance between the light and the shadow caster.
 
-#### `CircleShadowCaster`
+#### `addCircleCaster()`
 
 This is a rectangle which casts an elliptical shadow.
 
 <img src="docs/circle-shadow-caster.png" width="40%" border="1" />
 
-* `id: string` a unique identifier
 * `position: vec` the position of the shadow caster
 * `size: vec` the size of the shadow caster (axis-aligned rectangle), this will be used as the size of the ellipse
 * `anchor: vec` the anchor point of the circle where (0, 0) is the top-left corner, (0.5, 0.5) is the center, (1, 1) is the bottom-right corner
 * `minShadowDistance: number` the minimum distance between the anchor position and center of the shadow ellipse
 * `maxShadowDistance: number` the maximum distance between the anchor position and center of the shadow ellipse
+* `alpha: number` the opacity of the shadow
 
-We use a smoothstep interpolation to make the shadow distance vary between `minShadowDistance` and `maxShadowDistance` based on the distance between the light and the `CircleShadowCaster`.
+We use a smoothstep interpolation to make the shadow distance vary between `minShadowDistance` and `maxShadowDistance` based on the distance between the light and the shadow caster.
 
 ---
 
 Shadow receivers can be one of:
 
-#### `GroundShadowReceiver`
+#### `addGround()`
 
 This is a rectangle that receives ground shadows.
 
 <img src="docs/ground-shadow-receiver.png" width="40%" border="1" />
 
-* `id: string` a unique identifier
 * `position: vec` the position of the shadow receiver
 * `size: vec` the size of the shadow receiver (axis-aligned rectangle)
 * `colour: string` an optional background colour for the shadow receiver
-* `spriteName: string` the name of the sprite used for rendering this shadow receiver (the sprite will be repeated)
+* `image: image` the image used for rendering this shadow receiver (the image will be repeated)
+* `normalMap: image` an optional normal map (the image will be repeated)
+* `specularMap: image` an optional specular map (the image will be repeated)
+* `zIndex: number` receivers are drawn in order of z-index, and then by the position of their bottom edge
 
-#### `WallShadowReceiver`
+#### `addWallReceiver()`
 
 This is a rectangle or sprite that receives wall shadows.
 
 <img src="docs/wall-shadow-receiver.png" width="30%" border="1" />
 
-* `id: string` a unique identifier
-* `position: vec` the position of the shadow receiver
-* `size: vec` the size of the shadow receiver (axis-aligned rectangle)
-* `colour: string` an optional background colour for the shadow receiver
+As well as the options above:
+
 * `receiveLight: boolean` true if this shadow receiver should receive light and shadows (useful for tops of walls which should only receive ambient light)
-* `spriteName: string` the name of the sprite used for rendering this shadow receiver
-* `maskName: string` the name of a sprite used for masking the shadow receiver (optional)
-* `spriteRepeat: boolean` true if the sprite should be repeated, false if the sprite should be stretched
+* `mask: image` an image used for masking the shadow receiver, if this isn't set then the alpha channel of `image` is used
+* `repeat: boolean` true if the images should be repeated, false if the images should be stretched
+* `surfaceNormal: vec` the direction that this surface is facing, used for ambient lighting
 * `layer: WallShadowLayer` either `WallShadowLayer.One` or `WallShadowLayer.Two`
 
 ---

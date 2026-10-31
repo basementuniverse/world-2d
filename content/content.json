@@ -1,10 +1,5 @@
 [
   {
-    "name": "lighting-shader",
-    "type": "text",
-    "args": ["url:content/shaders/lighting.glsl"]
-  },
-  {
     "name": "anvil",
     "type": "image",
     "args": ["./content/images/anvil.png"]

@@ -3,7 +3,16 @@ const { CleanWebpackPlugin } = require('clean-webpack-plugin');
 
 module.exports = {
   mode: process.env.NODE_ENV || 'development',
-  entry: './src/index.ts',
+  entry: {
+    index: {
+      import: './src/lighting/index.ts',
+      library: {
+        name: 'Lighting2D',
+        type: 'umd',
+      },
+    },
+    game: './src/demo/index.ts',
+  },
   devtool: 'inline-source-map',
   watchOptions: {
     aggregateTimeout: 500,
@@ -18,6 +27,10 @@ module.exports = {
         use: 'ts-loader',
         exclude: /node_modules/,
       },
+      {
+        test: /\.glsl$/,
+        type: 'asset/source',
+      },
     ],
   },
   resolve: {
@@ -25,7 +38,8 @@ module.exports = {
   },
   output: {
     publicPath: '/build/',
-    filename: 'game.js',
+    filename: '[name].js',
+    globalObject: 'this',
     path: path.resolve(__dirname, 'build'),
   },
   performance: {
