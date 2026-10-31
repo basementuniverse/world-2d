@@ -248,8 +248,14 @@ export function overlap1d(a: Interval1d, b: Interval1d): Interval1d | null {
  * If there is no overlap, return null
  */
 export function overlap2d(a: Interval2d, b: Interval2d): Interval2d | null {
-  const xOverlap = this.overlap1d(a.left, a.right, b.left, b.right);
-  const yOverlap = this.overlap1d(a.top, a.bottom, b.top, b.bottom);
+  const xOverlap = overlap1d(
+    { start: a.left, end: a.right },
+    { start: b.left, end: b.right }
+  );
+  const yOverlap = overlap1d(
+    { start: a.top, end: a.bottom },
+    { start: b.top, end: b.bottom }
+  );
 
   if (xOverlap && yOverlap) {
     return {

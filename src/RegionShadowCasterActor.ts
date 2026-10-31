@@ -77,6 +77,7 @@ export class RegionShadowCasterActor
       id: this.id,
       position: this.position,
       size: this.size,
+      includeRegionShadow: this.includeRegionShadow,
     };
   }
 
@@ -90,6 +91,7 @@ export class RegionShadowCasterActor
   public destroy() {
     if (this.folder) {
       Game.gui.removeFolder(this.folder);
+      this.folder = null;
     }
   }
 

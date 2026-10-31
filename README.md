@@ -46,9 +46,12 @@ First, we create a `LightingSystem`:
 
 ```ts
 const lightingSystem: LightingSystem = new LightingSystem();
+lightingSystem.initialise();
 ```
 
 (see `src/LightingSystem.ts` for options you can pass to the `LightingSystem`)
+
+For normal mapping and specular mapping, pass `shaderEnabled: true` and the shader source as `shader`. Each light that uses the shader needs its own WebGL context and browsers limit how many can be active, so only the first `maxShaderLights` lights (12 by default) are shaded.
 
 Implement the `CircleShadowCaster`, `RegionShadowCaster`, `SpriteShadowCaster`, `GroundShadowReceiver`, and `WallShadowReceiver` interfaces on your game object classes as appropriate.
 
@@ -57,13 +60,15 @@ If you want normal mapping and specular mapping, implement the `NormalMappable` 
 Lights can be added to the lighting system like so:
 
 ```ts
-lightingSystem.lights.push(new Light({
+lightingSystem.lights.push(new Light(scene, lightingSystem, {
   position: vec(100, 100),
   radius: 100,
   colour: 'white',
   intensity: 0.5,
 }));
 ```
+
+(`scene` is the `LightingScene` that owns the light, it's used for mouse interaction in the demo)
 
 Update the lighting system every frame:
 
@@ -117,11 +122,11 @@ This is a rectangle that casts polygonal shadows.
 
 e.g.
 
-`includeRegionShadows = false` (default value)
+`includeRegionShadow = false` (default value)
 
 <img src="docs/region-shadow-caster-include-false.png" width="40%" border="1" />
 
-`includeRegionShadows = true`
+`includeRegionShadow = true`
 
 <img src="docs/region-shadow-caster-include-true.png" width="40%" border="1" />
 

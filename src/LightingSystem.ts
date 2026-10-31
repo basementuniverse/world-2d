@@ -17,7 +17,13 @@ import { ShadowReceiver } from './contracts/ShadowReceiver';
 import Game from './Game';
 import { Light } from './Light';
 import { Colour, Side, WallShadowLayer } from './types';
-import { colourToString, lerpColour, rectangleToInterval } from './utilities';
+import {
+  colourToString,
+  intervalToRectangle,
+  lerpColour,
+  rectanglesIntersect,
+  rectangleToInterval,
+} from './utilities';
 
 type LightingSystemOptions = {
   /**
@@ -50,6 +56,14 @@ type LightingSystemOptions = {
    * Shader for normal mapping and specular highlights
    */
   shader: string | null;
+
+  /**
+   * Maximum number of lights that can use the shader
+   *
+   * Each of these lights needs its own WebGL context, and browsers lose the
+   * oldest context when too many are active (the limit is 16 in Chrome)
+   */
+  maxShaderLights: number;
 
   /**
    * Alpha value for shader highlights
@@ -121,6 +135,7 @@ export class LightingSystem {
     softShadowsAmount: 2,
     shaderEnabled: false,
     shader: null,
+    maxShaderLights: 12,
     shaderHighlightAlpha: 0.24,
     shaderShadowAlpha: 0.32,
     shaderSpecularAlpha: 1,
@@ -177,6 +192,8 @@ export class LightingSystem {
 
   public sceneSpecularMapCanvas: HTMLCanvasElement;
   public sceneSpecularMapContext: CanvasRenderingContext2D;
+
+  private shaderLimitWarningShown = false;
 
   public constructor(options?: Partial<LightingSystemOptions>) {
     this.options = Object.assign(
@@ -248,6 +265,40 @@ export class LightingSystem {
   }
 
   /**
+   * Check if another light is allowed to create a shader canvas
+   */
+  public canCreateShaderCanvas(): boolean {
+    const shaderLights = this.lights.filter(light => light.shaderCanvas);
+    if (shaderLights.length < this.options.maxShaderLights) {
+      return true;
+    }
+
+    if (!this.shaderLimitWarningShown) {
+      console.warn(
+        `Shader limited to the first ${this.options.maxShaderLights} lights`
+      );
+      this.shaderLimitWarningShown = true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Make sure a screen-sized canvas matches the screen size and clear it
+   */
+  private resetContext(context: CanvasRenderingContext2D) {
+    const { canvas } = context;
+    if (canvas.width !== Game.screen.x || canvas.height !== Game.screen.y) {
+      canvas.width = Game.screen.x;
+      canvas.height = Game.screen.y;
+    } else {
+      context.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    context.imageSmoothingEnabled = this.options.imageSmoothingEnabled;
+  }
+
+  /**
    * Prepare the lightmaps for rendering
    */
   public prepare(
@@ -271,8 +322,14 @@ export class LightingSystem {
       this.options.ambientLightHighlightColour
     );
 
+    // Lights outside the camera bounds can't affect the visible scene
+    const cameraRectangle = intervalToRectangle(camera.bounds);
+    const visibleLights = this.lights.filter(light =>
+      rectanglesIntersect(light.bounds, cameraRectangle)
+    );
+
     // Prepare each light
-    this.lights.forEach(light =>
+    visibleLights.forEach(light =>
       light.prepare(
         camera,
         groundShadowReceivers,
@@ -284,10 +341,7 @@ export class LightingSystem {
     );
 
     // Prepare ground mask
-    this.groundMaskCanvas.width = Game.screen.x;
-    this.groundMaskCanvas.height = Game.screen.y;
-    this.groundMaskContext.imageSmoothingEnabled =
-      this.options.imageSmoothingEnabled;
+    this.resetContext(this.groundMaskContext);
     this.groundMaskContext.save();
     camera.setTransforms(this.groundMaskContext);
 
@@ -304,10 +358,7 @@ export class LightingSystem {
     this.groundMaskContext.restore();
 
     // Prepare wall mask 1
-    this.wallMask1Canvas.width = Game.screen.x;
-    this.wallMask1Canvas.height = Game.screen.y;
-    this.wallMask1Context.imageSmoothingEnabled =
-      this.options.imageSmoothingEnabled;
+    this.resetContext(this.wallMask1Context);
     this.wallMask1Context.save();
     camera.setTransforms(this.wallMask1Context);
 
@@ -328,10 +379,7 @@ export class LightingSystem {
     this.wallMask1Context.restore();
 
     // Prepare wall mask 2
-    this.wallMask2Canvas.width = Game.screen.x;
-    this.wallMask2Canvas.height = Game.screen.y;
-    this.wallMask2Context.imageSmoothingEnabled =
-      this.options.imageSmoothingEnabled;
+    this.resetContext(this.wallMask2Context);
     this.wallMask2Context.save();
     camera.setTransforms(this.wallMask2Context);
 
@@ -344,10 +392,7 @@ export class LightingSystem {
     this.wallMask2Context.restore();
 
     // Prepare ground-masked lightmap canvas
-    this.groundMaskedLightMapCanvas.width = Game.screen.x;
-    this.groundMaskedLightMapCanvas.height = Game.screen.y;
-    this.groundMaskedLightMapContext.imageSmoothingEnabled =
-      this.options.imageSmoothingEnabled;
+    this.resetContext(this.groundMaskedLightMapContext);
     this.groundMaskedLightMapContext.save();
     camera.setTransforms(this.groundMaskedLightMapContext);
 
@@ -362,7 +407,7 @@ export class LightingSystem {
 
     // Draw lights
     this.groundMaskedLightMapContext.globalCompositeOperation = 'screen';
-    this.lights.forEach(light => {
+    visibleLights.forEach(light => {
       this.groundMaskedLightMapContext.drawImage(
         light.groundLightCanvas,
         light.position.x - light.radius,
@@ -380,10 +425,7 @@ export class LightingSystem {
     this.groundMaskedLightMapContext.restore();
 
     // Prepare wall-masked lightmap layer 1 canvas
-    this.wallMaskedLightMap1Canvas.width = Game.screen.x;
-    this.wallMaskedLightMap1Canvas.height = Game.screen.y;
-    this.wallMaskedLightMap1Context.imageSmoothingEnabled =
-      this.options.imageSmoothingEnabled;
+    this.resetContext(this.wallMaskedLightMap1Context);
     this.wallMaskedLightMap1Context.save();
     camera.setTransforms(this.wallMaskedLightMap1Context);
 
@@ -409,7 +451,7 @@ export class LightingSystem {
 
     // Draw lights
     this.wallMaskedLightMap1Context.globalCompositeOperation = 'screen';
-    this.lights.forEach(light => {
+    visibleLights.forEach(light => {
       this.wallMaskedLightMap1Context.drawImage(
         light.wallLight1Canvas,
         light.position.x - light.radius,
@@ -418,10 +460,7 @@ export class LightingSystem {
     });
 
     // Prepare wall-masked lightmap 2 canvas
-    this.wallMaskedLightMap2Canvas.width = Game.screen.x;
-    this.wallMaskedLightMap2Canvas.height = Game.screen.y;
-    this.wallMaskedLightMap2Context.imageSmoothingEnabled =
-      this.options.imageSmoothingEnabled;
+    this.resetContext(this.wallMaskedLightMap2Context);
     this.wallMaskedLightMap2Context.save();
     camera.setTransforms(this.wallMaskedLightMap2Context);
 
@@ -447,7 +486,7 @@ export class LightingSystem {
 
     // Draw lights
     this.wallMaskedLightMap2Context.globalCompositeOperation = 'screen';
-    this.lights.forEach(light => {
+    visibleLights.forEach(light => {
       this.wallMaskedLightMap2Context.drawImage(
         light.wallLight2Canvas,
         light.position.x - light.radius,
@@ -474,12 +513,8 @@ export class LightingSystem {
     this.wallMaskedLightMap2Context.restore();
 
     // Prepare final lightmap
-    this.lightMapCanvas.width = Game.screen.x;
-    this.lightMapCanvas.height = Game.screen.y;
+    this.resetContext(this.lightMapContext);
     this.lightMapContext.save();
-    this.lightMapContext.clearRect(0, 0, Game.screen.x, Game.screen.y);
-    this.lightMapContext.imageSmoothingEnabled =
-      this.options.imageSmoothingEnabled;
     this.lightMapContext.drawImage(this.groundMaskedLightMapCanvas, 0, 0);
     this.lightMapContext.drawImage(this.wallMaskedLightMap1Canvas, 0, 0);
     this.lightMapContext.drawImage(this.wallMaskedLightMap2Canvas, 0, 0);
@@ -487,7 +522,7 @@ export class LightingSystem {
     if (this.options.shaderEnabled) {
       this.lightMapContext.save();
       camera.setTransforms(this.lightMapContext);
-      this.lights.forEach(light => {
+      visibleLights.forEach(light => {
         if (!light.shaderCanvas) {
           return;
         }
@@ -565,8 +600,7 @@ export class LightingSystem {
       return;
     }
 
-    this.sceneNormalMapCanvas.width = Game.screen.x;
-    this.sceneNormalMapCanvas.height = Game.screen.y;
+    this.resetContext(this.sceneNormalMapContext);
     this.sceneNormalMapContext.save();
     camera.setTransforms(this.sceneNormalMapContext);
 
@@ -585,8 +619,7 @@ export class LightingSystem {
       return;
     }
 
-    this.sceneSpecularMapCanvas.width = Game.screen.x;
-    this.sceneSpecularMapCanvas.height = Game.screen.y;
+    this.resetContext(this.sceneSpecularMapContext);
     this.sceneSpecularMapContext.save();
     camera.setTransforms(this.sceneSpecularMapContext);
 
@@ -646,11 +679,14 @@ export class LightingSystem {
 
         if (side === 'duplicate') {
           result = result.filter(caster => caster.id !== b.id);
+          b.destroy?.();
           continue;
         }
 
         result = result.filter(caster => ![a.id, b.id].includes(caster.id));
         result.push(a.merge(b, ...args));
+        a.destroy?.();
+        b.destroy?.();
       }
     }
 
@@ -740,7 +776,9 @@ export class LightingSystem {
    * Type guard to check if an object implements the Mergeable interface and
    * has a merge method
    */
-  private static isStrictlyMergeable(a: any): a is Required<Mergeable<any>> {
+  private static isStrictlyMergeable(
+    a: any
+  ): a is Mergeable<any> & Required<Pick<Mergeable<any>, 'merge'>> {
     return 'merge' in a && a.merge !== undefined;
   }
 }

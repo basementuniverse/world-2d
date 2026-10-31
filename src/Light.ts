@@ -123,7 +123,8 @@ export class Light implements Actor {
   public wallLight2Canvas: HTMLCanvasElement;
   private wallLight2Context: CanvasRenderingContext2D;
 
-  public shaderCanvas: ShaderCanvas;
+  public shaderCanvas: ShaderCanvas | null = null;
+  private shaderFailed = false;
 
   private dirty = true;
 
@@ -170,14 +171,25 @@ export class Light implements Actor {
     this.wallLight2Canvas.width = this.wallLight2Canvas.height =
       this._radius * 2;
     this.wallLight2Context = this.wallLight2Canvas.getContext('2d')!;
+  }
 
-    if (lightingSystem.options.shaderEnabled && lightingSystem.options.shader) {
-      this.shaderCanvas = new ShaderCanvas();
+  /**
+   * Bounding box for this light, including the offset wall lightmaps
+   */
+  public get bounds(): Rectangle {
+    const wallLightingYOffset =
+      this.lightingSystem.options.wallLightingYOffset;
 
-      const s = (this._radius * 2) / window.devicePixelRatio;
-      this.shaderCanvas.setSize(s, s);
-      this.shaderCanvas.setShader(lightingSystem.options.shader);
-    }
+    return {
+      position: vec(
+        this.position.x - this._radius,
+        this.position.y - this._radius + Math.min(wallLightingYOffset, 0)
+      ),
+      size: vec(
+        this._radius * 2,
+        this._radius * 2 + Math.abs(wallLightingYOffset)
+      ),
+    };
   }
 
   public get radius() {
@@ -232,6 +244,20 @@ export class Light implements Actor {
     if (this.folder) {
       Game.gui.removeFolder(this.folder);
     }
+
+    this.releaseShader();
+  }
+
+  /**
+   * Release this light's WebGL context, browsers only allow a limited number
+   * of active contexts
+   */
+  private releaseShader() {
+    this.shaderCanvas?.domElement
+      .getContext('webgl')
+      ?.getExtension('WEBGL_lose_context')
+      ?.loseContext();
+    this.shaderCanvas = null;
   }
 
   public update(dt: number) {
@@ -302,20 +328,10 @@ export class Light implements Actor {
     }
 
     // Bounding box for this light
-    const lightRectangle = {
-      position: vec.add(
-        vec.sub(this.position, vec(this._radius)),
-        vec(0, this.lightingSystem.options.wallLightingYOffset)
-      ),
-      size: vec.add(
-        vec(this._radius * 2),
-        vec(0, Math.abs(this.lightingSystem.options.wallLightingYOffset))
-      ),
-    };
+    const lightRectangle = this.bounds;
 
     // Render light onto ground light canvas
-    this.groundLightCanvas.width = this.groundLightCanvas.height =
-      this._radius * 2;
+    this.resetLightContext(this.groundLightContext);
     this.groundLightContext.drawImage(this.lightCanvas, 0, 0);
 
     // Subtract shadows from ground lightmap
@@ -340,12 +356,10 @@ export class Light implements Actor {
     }
 
     // Render light onto wall light canvases
-    this.wallLight1Canvas.width = this.wallLight1Canvas.height =
-      this._radius * 2;
+    this.resetLightContext(this.wallLight1Context);
     this.wallLight1Context.drawImage(this.lightCanvas, 0, 0);
 
-    this.wallLight2Canvas.width = this.wallLight2Canvas.height =
-      this._radius * 2;
+    this.resetLightContext(this.wallLight2Context);
     this.wallLight2Context.drawImage(this.lightCanvas, 0, 0);
 
     // Prepare full-wall shadows based on whether the wall is above or below
@@ -384,18 +398,36 @@ export class Light implements Actor {
     }
 
     // Prepare the shader if it's enabled
-    if (this.lightingSystem.options.shaderEnabled) {
+    if (this.lightingSystem.options.shaderEnabled && !this.shaderFailed) {
       try {
         this.prepareShader(camera);
       } catch (e) {
-        if (constants.DEBUG) {
-          console.error(e);
-        }
+        // Fall back to unshaded lighting rather than failing on every frame
+        console.error(`Shader disabled for light ${this.id}`, e);
+        this.shaderFailed = true;
+        this.releaseShader();
       }
     }
   }
 
+  /**
+   * Make sure a light canvas matches this light's size
+   *
+   * There's no need to clear the canvas because the base lightmap is opaque,
+   * so drawing it replaces the previous frame
+   */
+  private resetLightContext(context: CanvasRenderingContext2D) {
+    const size = Math.floor(this._radius * 2);
+    if (context.canvas.width !== size) {
+      context.canvas.width = context.canvas.height = size;
+    }
+
+    context.imageSmoothingEnabled =
+      this.lightingSystem.options.imageSmoothingEnabled;
+  }
+
   private prepareLightMap() {
+    this.dirty = false;
     this.lightCanvas.width = this.lightCanvas.height = this._radius * 2;
 
     this.lightContext.save();
@@ -1177,9 +1209,10 @@ export class Light implements Actor {
             continue;
           }
 
+          // shadow.size contains the radii of the shadow ellipse
           const shadowRectangle = {
-            position: vec.sub(shadow.position, vec.mul(shadow.size, 0.5)),
-            size: shadow.size,
+            position: vec.sub(shadow.position, shadow.size),
+            size: vec.mul(shadow.size, 2),
           };
 
           // Only cast this shadow if it overlaps the wall
@@ -1593,8 +1626,15 @@ export class Light implements Actor {
   }
 
   private prepareShader(camera: Camera) {
+    // The shader might have been enabled after this light was created
     if (!this.shaderCanvas) {
-      return;
+      const { shader } = this.lightingSystem.options;
+      if (!shader || !this.lightingSystem.canCreateShaderCanvas()) {
+        return;
+      }
+
+      this.shaderCanvas = new ShaderCanvas();
+      this.shaderCanvas.setShader(shader);
     }
 
     const lightTopLeftScreenPosition = camera.worldToScreen(
@@ -1605,7 +1645,9 @@ export class Light implements Actor {
     );
 
     const s = (this._radius * 2) / window.devicePixelRatio;
-    this.shaderCanvas.setSize(s, s);
+    if (this.shaderCanvas.width !== s) {
+      this.shaderCanvas.setSize(s, s);
+    }
     this.shaderCanvas.setUniform('u_resolution', [
       this._radius * 2,
       this._radius * 2,

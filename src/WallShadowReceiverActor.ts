@@ -139,6 +139,7 @@ export class WallShadowReceiverActor
   public destroy() {
     if (this.folder) {
       Game.gui.removeFolder(this.folder);
+      this.folder = null;
     }
   }
 

@@ -105,10 +105,18 @@ export class LightingScene extends Scene {
             this.wallShadowReceivers = LightingSystem.merge(
               this.wallShadowReceivers,
               (a, b) =>
+                // Non-repeating images would stretch across the merged wall
+                (a.spriteRepeat ||
+                  !(
+                    a.spriteName ||
+                    a.maskName ||
+                    a.normalMapName ||
+                    a.specularMapName
+                  )) &&
                 a.zIndex === b.zIndex &&
                 a.colour === b.colour &&
                 a.receiveLight === b.receiveLight &&
-                a.surfaceNormal === b.surfaceNormal &&
+                vec.eq(a.surfaceNormal, b.surfaceNormal) &&
                 a.spriteName === b.spriteName &&
                 a.maskName === b.maskName &&
                 a.normalMapName === b.normalMapName &&
@@ -123,6 +131,11 @@ export class LightingScene extends Scene {
               (a, b) => a.includeRegionShadow === b.includeRegionShadow,
               this
             );
+
+            // The selected actor might have been merged and destroyed
+            if (this.selected?.folder === null) {
+              this.selected = null;
+            }
           },
         },
         'click'
