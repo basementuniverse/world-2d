@@ -13,6 +13,7 @@ import {
 import { Light, LightOptions } from './Light';
 import { merge } from './merge';
 import { SceneObject } from './SceneObject';
+import { ShaderPass } from './ShaderPass';
 import {
   GroundReceiver,
   GroundReceiverOptions,
@@ -28,7 +29,6 @@ import {
   rectanglesIntersect,
 } from './utilities';
 import { Wall, WallOptions } from './Wall';
-import defaultShader = require('./shaders/lighting.glsl');
 
 export type LightingSystemOptions = {
   /**
@@ -58,32 +58,35 @@ export type LightingSystemOptions = {
   shaderEnabled: boolean;
 
   /**
-   * Shader for normal mapping and specular highlights
+   * Strength of highlights from normal maps
    */
-  shader: string;
+  shaderHighlightStrength: number;
 
   /**
-   * Maximum number of lights that can use the shader
-   *
-   * Each of these lights needs its own WebGL context, and browsers lose the
-   * oldest context when too many are active (the limit is 16 in Chrome)
+   * Strength of shading from normal maps
    */
-  maxShaderLights: number;
+  shaderShadowStrength: number;
 
   /**
-   * Alpha value for shader highlights
+   * Strength of specular highlights
    */
-  shaderHighlightAlpha: number;
+  shaderSpecularStrength: number;
 
   /**
-   * Alpha value for shader shadows
+   * Size of specular highlights, larger numbers make smaller highlights
    */
-  shaderShadowAlpha: number;
+  shaderShininess: number;
 
   /**
-   * Alpha value for shader specular highlights
+   * How far the camera is tilted away from looking straight down, this moves
+   * specular highlights towards the bottom of the screen
    */
-  shaderSpecularAlpha: number;
+  shaderViewTilt: number;
+
+  /**
+   * Quantize shading into bands of this size, set this to 0 for smooth shading
+   */
+  shaderBanding: number;
 
   /**
    * Colour of ambient (global) light
@@ -139,11 +142,12 @@ export class LightingSystem {
     softShadowsEnabled: false,
     softShadowsAmount: 2,
     shaderEnabled: false,
-    shader: defaultShader,
-    maxShaderLights: 12,
-    shaderHighlightAlpha: 0.24,
-    shaderShadowAlpha: 0.32,
-    shaderSpecularAlpha: 1,
+    shaderHighlightStrength: 0.5,
+    shaderShadowStrength: 0.5,
+    shaderSpecularStrength: 1,
+    shaderShininess: 16,
+    shaderViewTilt: 0.5,
+    shaderBanding: 0.1,
     ambientLightColour: 'black',
     ambientLightShadowColour: 'black',
     ambientLightHighlightColour: 'black',
@@ -201,13 +205,17 @@ export class LightingSystem {
   private lightMapContext = LightingSystem.createContext();
   public lightMapCanvas = this.lightMapContext.canvas;
 
+  private specularLightMapContext = LightingSystem.createContext();
+  public specularLightMapCanvas = this.specularLightMapContext.canvas;
+
   private sceneNormalMapContext = LightingSystem.createContext();
   public sceneNormalMapCanvas = this.sceneNormalMapContext.canvas;
 
   private sceneSpecularMapContext = LightingSystem.createContext();
   public sceneSpecularMapCanvas = this.sceneSpecularMapContext.canvas;
 
-  private shaderLimitWarningShown = false;
+  private shaderPass: ShaderPass | null = null;
+  private specularVisible = false;
 
   public constructor(options?: Partial<LightingSystemOptions>) {
     this.options = Object.assign(
@@ -299,7 +307,6 @@ export class LightingSystem {
    */
   public remove(object: SceneObject<any> | Light) {
     if (object instanceof Light) {
-      object.destroy();
       this.lights = this.lights.filter(light => light !== object);
       return;
     }
@@ -334,22 +341,16 @@ export class LightingSystem {
   }
 
   /**
-   * Check if another light is allowed to create a shader canvas
+   * Get the shader pass, if the shader is enabled and it can be used
    */
-  public canCreateShaderCanvas(): boolean {
-    const shaderLights = this.lights.filter(light => light.shaderCanvas);
-    if (shaderLights.length < this.options.maxShaderLights) {
-      return true;
+  private getShaderPass(): ShaderPass | null {
+    if (!this.options.shaderEnabled) {
+      return null;
     }
 
-    if (!this.shaderLimitWarningShown) {
-      console.warn(
-        `Shader limited to the first ${this.options.maxShaderLights} lights`
-      );
-      this.shaderLimitWarningShown = true;
-    }
+    this.shaderPass ??= new ShaderPass();
 
-    return false;
+    return this.shaderPass.available ? this.shaderPass : null;
   }
 
   /**
@@ -413,8 +414,19 @@ export class LightingSystem {
     this.screen = screen;
     this.sortSurfaces();
 
-    this.drawSceneNormalMap(camera);
-    this.drawSceneSpecularMap(camera);
+    const shaderPass = this.getShaderPass();
+    const hasSpecularMaps =
+      shaderPass !== null &&
+      [...this.groundReceivers, ...this.wallReceivers].some(
+        surface => surface.specularMap || surface.customDraw.specularMap
+      );
+
+    if (shaderPass) {
+      this.drawSceneNormalMap(camera);
+    }
+    if (hasSpecularMaps) {
+      this.drawSceneSpecularMap(camera);
+    }
 
     // Pre-calculate ambient light parameters
     const ambientLightDirection = vec.rot(
@@ -435,10 +447,12 @@ export class LightingSystem {
       rectanglesIntersect(light.bounds, cameraRectangle)
     );
 
+    // The shader blends lights into the light map itself
+    const canvasLights = shaderPass ? [] : visibleLights;
+
     // Prepare each light
     visibleLights.forEach(light =>
       light.prepare(
-        camera,
         this.groundReceivers,
         this.wallReceivers,
         this.regionCasters,
@@ -515,7 +529,7 @@ export class LightingSystem {
 
     // Draw lights
     this.groundMaskedLightMapContext.globalCompositeOperation = 'screen';
-    visibleLights.forEach(light => {
+    canvasLights.forEach(light => {
       this.groundMaskedLightMapContext.drawImage(
         light.groundLightCanvas,
         light.position.x - light.radius,
@@ -559,7 +573,7 @@ export class LightingSystem {
 
     // Draw lights
     this.wallMaskedLightMap1Context.globalCompositeOperation = 'screen';
-    visibleLights.forEach(light => {
+    canvasLights.forEach(light => {
       this.wallMaskedLightMap1Context.drawImage(
         light.wallLight1Canvas,
         light.position.x - light.radius,
@@ -594,7 +608,7 @@ export class LightingSystem {
 
     // Draw lights
     this.wallMaskedLightMap2Context.globalCompositeOperation = 'screen';
-    visibleLights.forEach(light => {
+    canvasLights.forEach(light => {
       this.wallMaskedLightMap2Context.drawImage(
         light.wallLight2Canvas,
         light.position.x - light.radius,
@@ -627,23 +641,45 @@ export class LightingSystem {
     this.lightMapContext.drawImage(this.wallMaskedLightMap1Canvas, 0, 0);
     this.lightMapContext.drawImage(this.wallMaskedLightMap2Canvas, 0, 0);
 
-    if (this.options.shaderEnabled) {
-      this.lightMapContext.save();
-      camera.setTransforms(this.lightMapContext);
-      visibleLights.forEach(light => {
-        if (!light.shaderCanvas) {
-          return;
-        }
-
-        this.lightMapContext.drawImage(
-          light.shaderCanvas.domElement,
-          light.position.x - light.radius,
-          light.position.y - light.radius
-        );
-      });
-      this.lightMapContext.restore();
-    }
     this.lightMapContext.restore();
+
+    this.specularVisible = hasSpecularMaps;
+    if (shaderPass) {
+      shaderPass.render({
+        camera,
+        screen,
+        lights: visibleLights,
+        ambientLightMap: this.lightMapCanvas,
+        normalMap: this.sceneNormalMapCanvas,
+        specularMap: hasSpecularMaps ? this.sceneSpecularMapCanvas : null,
+        groundMask: this.groundMaskCanvas,
+        wall1Mask: this.wallMask1Canvas,
+        wall2Mask: this.wallMask2Canvas,
+        imageSmoothingEnabled: this.options.imageSmoothingEnabled,
+        wallLightingYOffset: this.options.wallLightingYOffset,
+        highlightStrength: this.options.shaderHighlightStrength,
+        shadowStrength: this.options.shaderShadowStrength,
+        specularStrength: this.options.shaderSpecularStrength,
+        shininess: this.options.shaderShininess,
+        viewTilt: this.options.shaderViewTilt,
+        banding: this.options.shaderBanding,
+      });
+
+      this.resetContext(this.lightMapContext);
+      this.lightMapContext.drawImage(shaderPass.canvas, 0, 0);
+    }
+
+    if (shaderPass && hasSpecularMaps) {
+      shaderPass.showSpecular(screen);
+
+      // Highlights can only appear on the surfaces in the light map
+      this.resetContext(this.specularLightMapContext);
+      this.specularLightMapContext.save();
+      this.specularLightMapContext.drawImage(shaderPass.canvas, 0, 0);
+      this.specularLightMapContext.globalCompositeOperation = 'destination-in';
+      this.specularLightMapContext.drawImage(this.lightMapCanvas, 0, 0);
+      this.specularLightMapContext.restore();
+    }
   }
 
   /**
@@ -698,6 +734,13 @@ export class LightingSystem {
     context.globalCompositeOperation = 'multiply';
     context.drawImage(this.lightMapCanvas, 0, 0);
 
+    // Specular highlights are added afterwards so that they can be brighter
+    // than the scene underneath them
+    if (this.specularVisible) {
+      context.globalCompositeOperation = 'lighter';
+      context.drawImage(this.specularLightMapCanvas, 0, 0);
+    }
+
     context.restore();
   }
 
@@ -705,10 +748,6 @@ export class LightingSystem {
    * Draw normal maps for surfaces in the scene
    */
   private drawSceneNormalMap(camera: LightingCamera) {
-    if (!this.options.shaderEnabled) {
-      return;
-    }
-
     this.resetContext(this.sceneNormalMapContext);
     this.sceneNormalMapContext.save();
     camera.setTransforms(this.sceneNormalMapContext);
@@ -727,10 +766,6 @@ export class LightingSystem {
    * Draw specular maps for surfaces in the scene
    */
   private drawSceneSpecularMap(camera: LightingCamera) {
-    if (!this.options.shaderEnabled) {
-      return;
-    }
-
     this.resetContext(this.sceneSpecularMapContext);
     this.sceneSpecularMapContext.save();
     camera.setTransforms(this.sceneSpecularMapContext);

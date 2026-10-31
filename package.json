@@ -13,8 +13,7 @@
   "dependencies": {
     "@basementuniverse/parsecolor": "^1.0.2",
     "@basementuniverse/utils": "^1.4.0",
-    "@basementuniverse/vec": "^1.0.2",
-    "shader-canvas": "^0.8.3"
+    "@basementuniverse/vec": "^1.0.2"
   },
   "devDependencies": {
     "@basementuniverse/camera": "^1.4.0",

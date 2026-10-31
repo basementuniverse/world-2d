@@ -25,6 +25,7 @@ export class LightActor extends EditorActor {
   public colour: string = 'white';
   public coreRadius: number = 0.2;
   public intensity: number = 1;
+  public height: number = 48;
   public castShadows: boolean = true;
 
   public constructor(scene: LightingScene, data: Partial<LightActor> = {}) {
@@ -48,6 +49,7 @@ export class LightActor extends EditorActor {
     this.folder.add(this, 'colour');
     this.folder.add(this, 'coreRadius', 0, 1);
     this.folder.add(this, 'intensity', 0, 1);
+    this.folder.add(this, 'height', 1, 200);
     this.folder.add(this, 'castShadows');
   }
 
@@ -58,6 +60,7 @@ export class LightActor extends EditorActor {
       colour: this.colour,
       coreRadius: this.coreRadius,
       intensity: this.intensity,
+      height: this.height,
       castShadows: this.castShadows,
     };
   }
@@ -75,6 +78,7 @@ export class LightActor extends EditorActor {
       colour: this.colour,
       coreRadius: this.coreRadius,
       intensity: this.intensity,
+      height: this.height,
       castShadows: this.castShadows,
     };
   }

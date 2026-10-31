@@ -1,9 +1,8 @@
 import { vec } from '@basementuniverse/vec';
-import { ShaderCanvas } from 'shader-canvas';
 import { CircleCaster, RegionCaster, SpriteCaster } from './Caster';
 import type { LightingSystem } from './LightingSystem';
 import { GroundReceiver, WallReceiver } from './Surface';
-import { Colour, LightingCamera, Rectangle } from './types';
+import { Colour, Rectangle } from './types';
 export type LightOptions = {
     /**
      * World position of this light
@@ -27,6 +26,11 @@ export type LightOptions = {
      */
     intensity?: number;
     /**
+     * Height of this light above the ground, this is used for shading normal maps
+     * and specular maps
+     */
+    height?: number;
+    /**
      * Should this light cast shadows?
      */
     castShadows?: boolean;
@@ -35,7 +39,9 @@ export declare class Light {
     private static readonly DEFAULT_RADIUS;
     private static readonly DEFAULT_COLOUR;
     private static readonly DEFAULT_CORE_RADIUS;
+    private static readonly MAX_CORE_RADIUS;
     private static readonly DEFAULT_INTENSITY;
+    private static readonly DEFAULT_HEIGHT;
     private static readonly SHADOW_BUFFER;
     private lightingSystem;
     position: vec;
@@ -44,6 +50,7 @@ export declare class Light {
     colourObject: Colour;
     private _coreRadius;
     private _intensity;
+    height: number;
     castShadows: boolean;
     lightCanvas: HTMLCanvasElement;
     private lightContext;
@@ -53,8 +60,6 @@ export declare class Light {
     private wallLight1Context;
     wallLight2Canvas: HTMLCanvasElement;
     private wallLight2Context;
-    shaderCanvas: ShaderCanvas | null;
-    private shaderFailed;
     private dirty;
     constructor(lightingSystem: LightingSystem, options: LightOptions);
     /**
@@ -81,17 +86,7 @@ export declare class Light {
      * Remove this light from the lighting system
      */
     remove(): void;
-    /**
-     * Release this light's resources, this is called when the light is removed
-     * from the lighting system
-     */
-    destroy(): void;
-    /**
-     * Release this light's WebGL context, browsers only allow a limited number
-     * of active contexts
-     */
-    private releaseShader;
-    prepare(camera: LightingCamera, groundShadowReceivers: GroundReceiver[], wallShadowReceivers: WallReceiver[], regionShadowCasters: RegionCaster[], spriteShadowCasters: SpriteCaster[], circleShadowCasters: CircleCaster[]): void;
+    prepare(groundShadowReceivers: GroundReceiver[], wallShadowReceivers: WallReceiver[], regionShadowCasters: RegionCaster[], spriteShadowCasters: SpriteCaster[], circleShadowCasters: CircleCaster[]): void;
     /**
      * Make sure a light canvas matches this light's size
      *
@@ -108,5 +103,4 @@ export declare class Light {
     private prepareWallSpriteShadows;
     private prepareWallCircleShadows;
     private prepareRegionShadow;
-    private prepareShader;
 }

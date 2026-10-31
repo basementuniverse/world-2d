@@ -27,8 +27,8 @@ enum LightingSceneRenderMode {
   SelectedGroundLightMap = 'selected-ground',
   SelectedWall1LightMap = 'selected-wall1',
   SelectedWall2LightMap = 'selected-wall2',
-  SelectedShading = 'selected-shading',
   LightMap = 'lightmap',
+  SpecularLightMap = 'specularlightmap',
   SceneNormalMap = 'scenenormalmap',
   SceneSpecularMap = 'scenespecularmap',
 }
@@ -126,24 +126,45 @@ export class LightingScene extends Scene {
       })
       .listen();
     Game.gui
-      .add(this.lightingSystem.options, 'shaderHighlightAlpha', 0, 1, 0.001)
-      .name('Shader highlights alpha')
+      .add(this.lightingSystem.options, 'shaderHighlightStrength', 0, 1, 0.001)
+      .name('Shader highlights')
       .onChange(value => {
-        this.lightingSystem.options.shaderHighlightAlpha = value;
+        this.lightingSystem.options.shaderHighlightStrength = value;
       })
       .listen();
     Game.gui
-      .add(this.lightingSystem.options, 'shaderShadowAlpha', 0, 1, 0.001)
-      .name('Shader shadows alpha')
+      .add(this.lightingSystem.options, 'shaderShadowStrength', 0, 1, 0.001)
+      .name('Shader shadows')
       .onChange(value => {
-        this.lightingSystem.options.shaderShadowAlpha = value;
+        this.lightingSystem.options.shaderShadowStrength = value;
       })
       .listen();
     Game.gui
-      .add(this.lightingSystem.options, 'shaderSpecularAlpha', 0, 1, 0.001)
-      .name('Shader specular alpha')
+      .add(this.lightingSystem.options, 'shaderSpecularStrength', 0, 2, 0.001)
+      .name('Shader specular')
       .onChange(value => {
-        this.lightingSystem.options.shaderSpecularAlpha = value;
+        this.lightingSystem.options.shaderSpecularStrength = value;
+      })
+      .listen();
+    Game.gui
+      .add(this.lightingSystem.options, 'shaderShininess', 1, 128, 1)
+      .name('Shader shininess')
+      .onChange(value => {
+        this.lightingSystem.options.shaderShininess = value;
+      })
+      .listen();
+    Game.gui
+      .add(this.lightingSystem.options, 'shaderViewTilt', 0, 2, 0.01)
+      .name('Shader view tilt')
+      .onChange(value => {
+        this.lightingSystem.options.shaderViewTilt = value;
+      })
+      .listen();
+    Game.gui
+      .add(this.lightingSystem.options, 'shaderBanding', 0, 0.5, 0.01)
+      .name('Shader banding')
+      .onChange(value => {
+        this.lightingSystem.options.shaderBanding = value;
       })
       .listen();
     Game.gui
@@ -299,7 +320,7 @@ export class LightingScene extends Scene {
         position: this.camera.position,
         scale: this.camera.scale,
       },
-      options: exclude(this.lightingSystem.options, 'shader'),
+      options: this.lightingSystem.options,
       groundShadowReceivers: this.groundShadowReceivers.map(g => g.serialise()),
       wallShadowReceivers: this.wallShadowReceivers.map(w => w.serialise()),
       regionShadowCasters: this.regionShadowCasters.map(r => r.serialise()),
@@ -705,7 +726,7 @@ export class LightingScene extends Scene {
    */
   private drawSelectedLight(
     context: CanvasRenderingContext2D,
-    getCanvas: (light: LightActor) => HTMLCanvasElement | undefined,
+    getCanvas: (light: LightActor) => HTMLCanvasElement,
     yOffset: number
   ) {
     if (!this.selected || this.selected.type !== 'Light') {
@@ -714,15 +735,10 @@ export class LightingScene extends Scene {
 
     this.lightingSystem.prepare(this.camera, Game.screen);
 
-    const canvas = getCanvas(this.selected);
-    if (!canvas) {
-      return;
-    }
-
     context.save();
     this.camera.setTransforms(context);
     context.drawImage(
-      canvas,
+      getCanvas(this.selected),
       this.selected.position.x - this.selected.radius,
       this.selected.position.y - this.selected.radius + yOffset
     );
@@ -803,16 +819,12 @@ export class LightingScene extends Scene {
         );
         break;
 
-      case LightingSceneRenderMode.SelectedShading:
-        this.drawSelectedLight(
-          context,
-          light => light.object.shaderCanvas?.domElement,
-          0
-        );
-        break;
-
       case LightingSceneRenderMode.LightMap:
         this.drawPrepared(context, () => lighting.lightMapCanvas);
+        break;
+
+      case LightingSceneRenderMode.SpecularLightMap:
+        this.drawPrepared(context, () => lighting.specularLightMapCanvas);
         break;
 
       case LightingSceneRenderMode.SceneNormalMap:

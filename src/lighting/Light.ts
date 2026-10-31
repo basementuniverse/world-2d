@@ -8,7 +8,6 @@ import {
   unlerp,
 } from '@basementuniverse/utils';
 import { vec } from '@basementuniverse/vec';
-import { ShaderCanvas } from 'shader-canvas';
 import {
   CircleCaster,
   RegionCaster,
@@ -20,7 +19,6 @@ import { GroundReceiver, WallReceiver } from './Surface';
 import {
   Colour,
   Interval2d,
-  LightingCamera,
   Line,
   PolygonVertices,
   Rectangle,
@@ -71,6 +69,12 @@ export type LightOptions = {
   intensity?: number;
 
   /**
+   * Height of this light above the ground, this is used for shading normal maps
+   * and specular maps
+   */
+  height?: number;
+
+  /**
    * Should this light cast shadows?
    */
   castShadows?: boolean;
@@ -109,7 +113,9 @@ export class Light {
   private static readonly DEFAULT_RADIUS = 100;
   private static readonly DEFAULT_COLOUR = 'white';
   private static readonly DEFAULT_CORE_RADIUS = 0.2;
+  private static readonly MAX_CORE_RADIUS = 0.99;
   private static readonly DEFAULT_INTENSITY = 1;
+  private static readonly DEFAULT_HEIGHT = 48;
   private static readonly SHADOW_BUFFER = 20;
 
   private lightingSystem: LightingSystem;
@@ -120,6 +126,7 @@ export class Light {
   public colourObject: Colour;
   private _coreRadius: number;
   private _intensity: number;
+  public height: number;
   public castShadows: boolean;
 
   public lightCanvas: HTMLCanvasElement;
@@ -134,9 +141,6 @@ export class Light {
   public wallLight2Canvas: HTMLCanvasElement;
   private wallLight2Context: CanvasRenderingContext2D;
 
-  public shaderCanvas: ShaderCanvas | null = null;
-  private shaderFailed = false;
-
   private dirty = true;
 
   public constructor(lightingSystem: LightingSystem, options: LightOptions) {
@@ -147,6 +151,7 @@ export class Light {
     this._colour = options.colour ?? Light.DEFAULT_COLOUR;
     this._coreRadius = options.coreRadius ?? Light.DEFAULT_CORE_RADIUS;
     this._intensity = options.intensity ?? Light.DEFAULT_INTENSITY;
+    this.height = options.height ?? Light.DEFAULT_HEIGHT;
     this.castShadows = options.castShadows ?? true;
     this.colourObject = parseColor(this._colour);
 
@@ -244,14 +249,22 @@ export class Light {
    * Change some of the options for this light
    */
   public set(options: Partial<LightOptions>) {
-    const { position, radius, colour, coreRadius, intensity, castShadows } =
-      options;
+    const {
+      position,
+      radius,
+      colour,
+      coreRadius,
+      intensity,
+      height,
+      castShadows,
+    } = options;
 
     this.position = vec.cpy(position ?? this.position);
     this.radius = radius ?? this.radius;
     this.colour = colour ?? this.colour;
     this.coreRadius = coreRadius ?? this.coreRadius;
     this.intensity = intensity ?? this.intensity;
+    this.height = height ?? this.height;
     this.castShadows = castShadows ?? this.castShadows;
   }
 
@@ -262,28 +275,7 @@ export class Light {
     this.lightingSystem.remove(this);
   }
 
-  /**
-   * Release this light's resources, this is called when the light is removed
-   * from the lighting system
-   */
-  public destroy() {
-    this.releaseShader();
-  }
-
-  /**
-   * Release this light's WebGL context, browsers only allow a limited number
-   * of active contexts
-   */
-  private releaseShader() {
-    this.shaderCanvas?.domElement
-      .getContext('webgl')
-      ?.getExtension('WEBGL_lose_context')
-      ?.loseContext();
-    this.shaderCanvas = null;
-  }
-
   public prepare(
-    camera: LightingCamera,
     groundShadowReceivers: GroundReceiver[],
     wallShadowReceivers: WallReceiver[],
     regionShadowCasters: RegionCaster[],
@@ -364,18 +356,6 @@ export class Light {
         wallShadowReceivers
       );
     }
-
-    // Prepare the shader if it's enabled
-    if (this.lightingSystem.options.shaderEnabled && !this.shaderFailed) {
-      try {
-        this.prepareShader(camera);
-      } catch (e) {
-        // Fall back to unshaded lighting rather than failing on every frame
-        console.error('Shader disabled for light', this, e);
-        this.shaderFailed = true;
-        this.releaseShader();
-      }
-    }
   }
 
   /**
@@ -410,7 +390,7 @@ export class Light {
     const gradient = this.lightContext.createRadialGradient(
       this._radius,
       this._radius,
-      this._radius * this._coreRadius,
+      this._radius * Math.min(this._coreRadius, Light.MAX_CORE_RADIUS),
       this._radius,
       this._radius,
       this._radius
@@ -1599,97 +1579,5 @@ export class Light {
       rightEdge,
       vertices: shadowPolygon,
     };
-  }
-
-  private prepareShader(camera: LightingCamera) {
-    // The shader might have been enabled after this light was created
-    if (!this.shaderCanvas) {
-      const { shader } = this.lightingSystem.options;
-      if (!shader || !this.lightingSystem.canCreateShaderCanvas()) {
-        return;
-      }
-
-      this.shaderCanvas = new ShaderCanvas();
-      this.shaderCanvas.setShader(shader);
-    }
-
-    const lightTopLeftScreenPosition = camera.worldToScreen(
-      vec.sub(this.position, vec(this._radius))
-    );
-    const lightBottomRightScreenPosition = camera.worldToScreen(
-      vec.add(this.position, vec(this._radius))
-    );
-
-    const s = (this._radius * 2) / window.devicePixelRatio;
-    if (this.shaderCanvas.width !== s) {
-      this.shaderCanvas.setSize(s, s);
-    }
-    this.shaderCanvas.setUniform('u_resolution', [
-      this._radius * 2,
-      this._radius * 2,
-    ]);
-    this.shaderCanvas.setUniform('u_lightColour', [
-      this.colourObject.r / 255,
-      this.colourObject.g / 255,
-      this.colourObject.b / 255,
-      this.colourObject.a,
-    ]);
-    this.shaderCanvas.setUniform('u_lightScreenPositionTopLeft', [
-      lightTopLeftScreenPosition.x / this.lightingSystem.screen.x,
-      lightTopLeftScreenPosition.y / this.lightingSystem.screen.y,
-    ]);
-    this.shaderCanvas.setUniform('u_lightScreenPositionBottomRight', [
-      lightBottomRightScreenPosition.x / this.lightingSystem.screen.x,
-      lightBottomRightScreenPosition.y / this.lightingSystem.screen.y,
-    ]);
-    this.shaderCanvas.setUniform(
-      'u_wallLightingYOffset',
-      this.lightingSystem.options.wallLightingYOffset
-    );
-    this.shaderCanvas.setUniform(
-      'u_highlightAlpha',
-      this.lightingSystem.options.shaderHighlightAlpha
-    );
-    this.shaderCanvas.setUniform(
-      'u_shadowAlpha',
-      this.lightingSystem.options.shaderShadowAlpha
-    );
-    this.shaderCanvas.setUniform(
-      'u_specularAlpha',
-      this.lightingSystem.options.shaderSpecularAlpha
-    );
-    this.shaderCanvas.setTexture(
-      'u_sceneNormalMap',
-      this.lightingSystem.sceneNormalMapCanvas as unknown as HTMLImageElement
-    );
-    this.shaderCanvas.setTexture(
-      'u_sceneSpecularMap',
-      this.lightingSystem.sceneSpecularMapCanvas as unknown as HTMLImageElement
-    );
-    this.shaderCanvas.setTexture(
-      'u_groundLightMap',
-      this.groundLightCanvas as unknown as HTMLImageElement
-    );
-    this.shaderCanvas.setTexture(
-      'u_wall1LightMap',
-      this.wallLight1Canvas as unknown as HTMLImageElement
-    );
-    this.shaderCanvas.setTexture(
-      'u_wall2LightMap',
-      this.wallLight2Canvas as unknown as HTMLImageElement
-    );
-    this.shaderCanvas.setTexture(
-      'u_groundMask',
-      this.lightingSystem.groundMaskCanvas as unknown as HTMLImageElement
-    );
-    this.shaderCanvas.setTexture(
-      'u_wall1Mask',
-      this.lightingSystem.wallMask1Canvas as unknown as HTMLImageElement
-    );
-    this.shaderCanvas.setTexture(
-      'u_wall2Mask',
-      this.lightingSystem.wallMask2Canvas as unknown as HTMLImageElement
-    );
-    this.shaderCanvas.render();
   }
 }

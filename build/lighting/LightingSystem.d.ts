@@ -30,28 +30,30 @@ export type LightingSystemOptions = {
      */
     shaderEnabled: boolean;
     /**
-     * Shader for normal mapping and specular highlights
+     * Strength of highlights from normal maps
      */
-    shader: string;
+    shaderHighlightStrength: number;
     /**
-     * Maximum number of lights that can use the shader
-     *
-     * Each of these lights needs its own WebGL context, and browsers lose the
-     * oldest context when too many are active (the limit is 16 in Chrome)
+     * Strength of shading from normal maps
      */
-    maxShaderLights: number;
+    shaderShadowStrength: number;
     /**
-     * Alpha value for shader highlights
+     * Strength of specular highlights
      */
-    shaderHighlightAlpha: number;
+    shaderSpecularStrength: number;
     /**
-     * Alpha value for shader shadows
+     * Size of specular highlights, larger numbers make smaller highlights
      */
-    shaderShadowAlpha: number;
+    shaderShininess: number;
     /**
-     * Alpha value for shader specular highlights
+     * How far the camera is tilted away from looking straight down, this moves
+     * specular highlights towards the bottom of the screen
      */
-    shaderSpecularAlpha: number;
+    shaderViewTilt: number;
+    /**
+     * Quantize shading into bands of this size, set this to 0 for smooth shading
+     */
+    shaderBanding: number;
     /**
      * Colour of ambient (global) light
      */
@@ -120,11 +122,14 @@ export declare class LightingSystem {
     wallMaskedLightMap2Canvas: HTMLCanvasElement;
     private lightMapContext;
     lightMapCanvas: HTMLCanvasElement;
+    private specularLightMapContext;
+    specularLightMapCanvas: HTMLCanvasElement;
     private sceneNormalMapContext;
     sceneNormalMapCanvas: HTMLCanvasElement;
     private sceneSpecularMapContext;
     sceneSpecularMapCanvas: HTMLCanvasElement;
-    private shaderLimitWarningShown;
+    private shaderPass;
+    private specularVisible;
     constructor(options?: Partial<LightingSystemOptions>);
     /**
      * Add an area of ground that receives light and shadows
@@ -178,9 +183,9 @@ export declare class LightingSystem {
      */
     optimise(onMerge?: (merged: WallReceiver | RegionCaster, a: WallReceiver | RegionCaster, b: WallReceiver | RegionCaster) => void): void;
     /**
-     * Check if another light is allowed to create a shader canvas
+     * Get the shader pass, if the shader is enabled and it can be used
      */
-    canCreateShaderCanvas(): boolean;
+    private getShaderPass;
     /**
      * Make sure a screen-sized canvas matches the screen size and clear it
      */

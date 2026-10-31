@@ -115,7 +115,30 @@ lighting.render(context, camera, context => {
 
 Pass `shaderEnabled: true` to the `LightingSystem`, and add a `normalMap` and `specularMap` image to anything that needs one.
 
-Each light that uses the shader needs its own WebGL context and browsers limit how many can be active, so only the first `maxShaderLights` lights (12 by default) are shaded.
+```ts
+const lighting = new LightingSystem({
+  shaderEnabled: true,
+  shaderSpecularStrength: 1.5,
+});
+
+lighting.addGround({
+  position: vec(0, 0),
+  size: vec(800, 600),
+  image: floorImage,
+  normalMap: floorNormalImage,
+  specularMap: floorSpecularImage,
+});
+
+lighting.addLight({
+  position: vec(250, 250),
+  radius: 200,
+  height: 48,
+});
+```
+
+The red channel of a specular map sets how shiny each part of the surface is. A light's `height` controls how low the light is over a surface, so lower lights make normal maps look stronger.
+
+If WebGL isn't available then the scene is rendered without normal maps or specular maps.
 
 ### Masks and shadows
 
@@ -127,7 +150,7 @@ Everything that's returned from an `add...()` method has `moveTo()` and `remove(
 
 An `Actor` or `Wall` is made from several smaller objects, which are available as `actor.surface` and `actor.caster`, or `wall.front`, `wall.top`, and `wall.caster`.
 
-Lights have `radius`, `colour`, `coreRadius`, `intensity`, and `castShadows` properties which can be changed at any time.
+Lights have `radius`, `colour`, `coreRadius`, `intensity`, `height`, and `castShadows` properties which can be changed at any time.
 
 ### Optimising level geometry
 
@@ -262,7 +285,7 @@ As well as the options above:
 6. Prepare the wall-masked lightmap (layer 1)
 7. Prepare the wall-masked lightmap (layer 2)
 
-The 3 light maps (ground, wall layer 1, and wall layer 2) can now be combined to create the final light map. This is done inside `LightingSystem.draw()`.
+The 3 light maps (ground, wall layer 1, and wall layer 2) can now be combined to create the final light map.
 
 #### 1. Prepare each light separately
 
@@ -355,6 +378,17 @@ If we take the un-lit scene...
 ...and overlay the final lightmap using the `multiply` composite operation, we get the final scene with lighting and shadows.
 
 <img src="docs/final-scene-lighting.png" width="40%" border="1" />
+
+### Normal maps and specular maps
+
+When the shader is enabled, the steps above are the same except that lights aren't drawn into the masked lightmaps, so those only contain ambient light. All of the lights are then shaded using a single WebGL context, which has 2 passes:
+
+1. **Diffuse**: each light's lightmap is multiplied by how much light the surface receives compared to a flat surface, and then blended into the final lightmap in the same way as the `screen` composite operation. A flat surface is multiplied by 1, so it looks the same as it does without the shader. Lights are shaded separately, so the bumps from one light don't affect another light.
+2. **Specular**: each light's highlights are added together in a separate buffer. These are calculated from the light's height and a fixed camera direction, and are multiplied by the light's lightmap so that they fade with distance and are blocked by shadows.
+
+The final lightmap is drawn over the scene using the `multiply` composite operation, which can only darken the scene. The specular highlights are then drawn over the top using the `lighter` composite operation, so they can be brighter than the scene and appear on dark surfaces.
+
+The scene's normal map, specular map, and masks are uploaded once per frame, and 3 lightmaps are uploaded for each visible light.
 
 ### Why 2 wall layers?
 
