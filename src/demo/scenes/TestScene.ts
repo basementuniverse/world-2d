@@ -7,7 +7,6 @@ import { vec } from '@basementuniverse/vec';
 import { LightingSystem } from '../../lighting';
 import { Line, Rectangle, Sector2d } from '../../lighting/types';
 import {
-  lineYIntercept,
   polygon,
   rectangleToInterval,
   rectangleVertices,
@@ -19,7 +18,7 @@ import { RegionShadowCasterActor } from '../actors/RegionShadowCasterActor';
 import { WallShadowReceiverActor } from '../actors/WallShadowReceiverActor';
 import Game from '../Game';
 import { LightingScene } from './LightingScene';
-import { lineInRectangle } from '../utilities';
+import { lineInRectangle, lineYIntercept } from '../utilities';
 
 export class TestScene extends Scene {
   private TEST_RECT: Rectangle = {

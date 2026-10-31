@@ -1,8 +1,8 @@
-import { clamp } from '@basementuniverse/utils';
+import { clamp, floatEquals } from '@basementuniverse/utils';
 import { vec } from '@basementuniverse/vec';
 import { Rectangle } from '../lighting';
 import { Interval1d, Interval2d, Line } from '../lighting/types';
-import { overlap1d, rectangleToInterval } from '../lighting/utilities';
+import { rectangleToInterval } from '../lighting/utilities';
 
 /**
  * Clamp a vector between min and max
@@ -156,4 +156,47 @@ export function sortActors(
   return (
     a.zIndex - b.zIndex || a.position.y + a.size.y - (b.position.y + b.size.y)
   );
+}
+
+/**
+ * Calculate the x position of a line where it intercepts a given y
+ *
+ * Returns a tuple containing the intercept position and the normalised
+ * progress along the line
+ */
+export function lineYIntercept(
+  line: Line,
+  y: number,
+  allowBefore: boolean = true,
+  allowAfter: boolean = true
+): [number, number] | null {
+  if (floatEquals(line.start.y, line.end.y)) {
+    return null;
+  }
+
+  const t = (y - line.start.y) / (line.end.y - line.start.y);
+  if (t < 0 && !allowBefore) {
+    return null;
+  }
+  if (t > 1 && !allowAfter) {
+    return null;
+  }
+
+  return [line.start.x + t * (line.end.x - line.start.x), t];
+}
+
+/**
+ * Find the overlap between 2 1d intervals
+ *
+ * If there is no overlap, return null
+ */
+export function overlap1d(a: Interval1d, b: Interval1d): Interval1d | null {
+  if (a.end < b.start || a.start > b.end) {
+    return null;
+  }
+
+  return {
+    start: Math.max(a.start, b.start),
+    end: Math.min(a.end, b.end),
+  };
 }

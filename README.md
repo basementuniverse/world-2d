@@ -113,14 +113,9 @@ lighting.render(context, camera, context => {
 
 ### Normal maps and specular maps
 
-Pass `shaderEnabled: true` to the `LightingSystem`, and add a `normalMap` and `specularMap` image to anything that needs one.
+Add a `normalMap` and `specularMap` image to anything that needs one.
 
 ```ts
-const lighting = new LightingSystem({
-  shaderEnabled: true,
-  shaderSpecularStrength: 1.5,
-});
-
 lighting.addGround({
   position: vec(0, 0),
   size: vec(800, 600),
@@ -138,11 +133,15 @@ lighting.addLight({
 
 The red channel of a specular map sets how shiny each part of the surface is. A light's `height` controls how low the light is over a surface, so lower lights make normal maps look stronger.
 
-If WebGL isn't available then the scene is rendered without normal maps or specular maps.
+Set `surfaceMapsEnabled: false` on the `LightingSystem` to turn these off.
 
 ### Masks and shadows
 
-Masks and sprite shadows are generated automatically from an image's alpha channel, so you only need to provide a `mask` or `shadow` image if you want something different.
+A surface's shape comes from its image's alpha channel, and an actor's shadow is a silhouette of its image, so you only need to provide a `mask` or `shadow` image if you want something different.
+
+### Requirements
+
+Lighting is rendered using WebGL. If it isn't available then a warning is logged and the scene is drawn without any lighting.
 
 ### Changing and removing things
 
@@ -268,108 +267,71 @@ This is a rectangle or sprite that receives wall shadows.
 As well as the options above:
 
 * `receiveLight: boolean` true if this shadow receiver should receive light and shadows (useful for tops of walls which should only receive ambient light)
-* `mask: image` an image used for masking the shadow receiver, if this isn't set then the alpha channel of `image` is used
+* `mask: image` an image whose alpha channel decides which parts of the shadow receiver are lit, if this isn't set then `image` is used
 * `repeat: boolean` true if the images should be repeated, false if the images should be stretched
 * `surfaceNormal: vec` the direction that this surface is facing, used for ambient lighting
-* `layer: WallShadowLayer` either `WallShadowLayer.One` or `WallShadowLayer.Two`
+* `shadowBias: number` how far towards the light to look for shadows on the ground, this should be enough to get out of the receiver's own shadow
+* `projectShadows: boolean` true if sprite and circle shadows should climb this receiver, this should be false for anything that casts one of these shadows
+
+Receivers can overlap each other in any way. They're drawn in order of `zIndex` and then by the position of their bottom edge, and each pixel belongs to whichever receiver was drawn last.
 
 ---
 
 ### Overview of `LightingSystem.prepare()` steps
 
-1. Prepare each light separately
-2. Prepare the ground mask
-3. Prepare the wall mask (layer 1)
-4. Prepare the wall mask (layer 2)
-5. Prepare the ground-masked lightmap
-6. Prepare the wall-masked lightmap (layer 1)
-7. Prepare the wall-masked lightmap (layer 2)
+1. Prepare each light
+2. Draw the surface map
+3. Draw the ambient light
+4. Blend in each light
+5. Add up the specular highlights
 
-The 3 light maps (ground, wall layer 1, and wall layer 2) can now be combined to create the final light map.
+#### 1. Prepare each light
 
-#### 1. Prepare each light separately
-
-##### 1.1. Prepare the base lightmap
-
-First we prepare the base lightmap for the current light by drawing a radial gradient. We only do this if any of the light's parameters have changed.
+We only draw the light's gradient if any of the light's parameters have changed.
 
 <img src="docs/base-light-map.png" width="40%" border="1" />
 
-##### 1.2. Prepare the ground lightmap
-
-We draw the base lightmap onto the ground lightmap and then draw ground shadows for each shadow caster in range of the light.
+Next we draw 2 shadow maps for the light, which show the shadows on the ground. These are white where the ground is lit and black where it's in shadow. Region casters are drawn onto one, and sprite casters and circle casters are drawn onto the other.
 
 <img src="docs/light-map-ground-shadows.png" width="40%" border="1" />
 
-##### 1.3. Prepare the wall lightmaps (both layers 1 and 2)
+There are 2 shadow maps because these shadows behave differently on walls (see below).
 
-We draw the base lightmap onto each of the wall lightmaps.
+#### 2. Draw the surface map
 
-Next, we prepare initial shading for each wall shadow receiver in range of the light. This means we shade the entire receiver based on the y-position of the light relative to the y-position of the receiver's bottom edge.
+We draw every visible shadow receiver into a screen-sized surface map using WebGL, in the order that they appear in the scene. Each pixel of the surface map says what kind of surface is at that pixel, and where that surface meets the ground (its "foot").
 
-There's a small amount of margin when doing this, so that light can fade in gradually rather than snapping on/off.
+There's no blending when drawing the surface map, so each pixel belongs to exactly one surface. This is why receivers can overlap each other, and why the foot position can be stored as a number in 2 colour channels.
 
-Also note that wall lighting has a small amount of y-offset which helps to create a more realistic "pseudo-3d" lighting effect.
+#### 3. Draw the ambient light
 
-<img src="docs/light-map-wall-shadows-1.png" width="40%" border="1" />
+We draw every visible shadow receiver again, this time filling each one with its ambient light colour.
 
-Finally, we project shadows onto the wall lightmaps. This is done by finding where ground shadows intersect the bottom edges of shadow receivers and drawing regions, scaled/rotated sprites, or ellipses onto the wall lightmaps (either layer 1 or 2 depending on the shadow caster's settings).
+#### 4. Blend in each light
 
-<img src="docs/light-map-wall-shadows-2.png" width="40%" border="1" />
+We draw each light's bounding box into the final lightmap using a shader, which looks up the surface at each pixel.
 
-The lightmap for this light is now complete. We do this for each light in the scene.
+For a pixel on the **ground**, the light is simply the light's gradient multiplied by both shadow maps.
 
-#### 2. Prepare the ground mask
+For a pixel on a **wall**, we look up the shadow on the ground at the wall's foot:
 
-We draw all of the ground shadow receivers onto the ground mask.
+* **Region casters** are solid walls, so if their shadow reaches the foot of a wall then it covers the whole height of the wall. We sample the region shadow map at the foot.
+* **Sprite casters and circle casters** have shadows with a length, so they climb a wall until they run out. The higher up the wall a pixel is, the further along the shadow we look, so the shadow stops at the right height.
+* **Walls can't be lit from behind**, so a wall fades out as the light moves above its foot. `wallLightingCutoffDistance` sets how quickly this happens, so that lights don't snap on and off.
 
-Next, we subtract all of the wall shadow receivers (ignoring their layer settings) using the `destination-out` composite operation.
+Wall lighting has a small y-offset (`wallLightingYOffset`), which helps to create a more realistic "pseudo-3d" lighting effect.
 
-This is done using each receiver's `drawMask()` method.
+If normal maps are being used, the result is then multiplied by how much light the surface receives compared to a flat surface. A flat surface is multiplied by 1. Lights are shaded separately, so the bumps from one light don't affect another light.
 
-<img src="docs/ground-mask.png" width="40%" border="1" />
-
-#### 3. Prepare the wall mask (layer 1)
-
-Similarly to the ground mask, we draw all of the wall shadow receivers for layer 1 onto the layer 1 wall mask, then subtract all of the layer 2 wall shadow receivers.
-
-This is done using each receiver's `drawMask()` method.
-
-<img src="docs/wall-mask-1.png" width="40%" border="1" />
-
-#### 4. Prepare the wall mask (layer 2)
-
-We draw all of the layer 2 wall shadow receivers onto the layer 2 wall mask.
-
-This is done using each receiver's `drawMask()` method.
-
-<img src="docs/wall-mask-2.png" width="20%" border="1" />
-
-#### 5. Prepare the ground-masked lightmap
-
-We fill the ground-masked lightmap canvas with the ambient light colour, then we draw each light's ground lightmap using the `screen` composite operation.
-
-Finally, we mask the ground-masked lightmap using the ground mask and the `destination-atop` composite operation.
-
-<img src="docs/ground-masked-light-map.png" width="40%" border="1" />
-
-#### 6. Prepare the wall-masked lightmap (layer 1)
-
-We do the same for the layer 1 wall lightmap...
-
-<img src="docs/wall-masked-1-light-map.png" width="40%" border="1" />
-
-#### 7. Prepare the wall-masked lightmap (layer 2)
-
-...and again for the layer 2 wall lightmap.
-
-<img src="docs/wall-masked-2-light-map.png" width="20%" border="1" />
-
----
-
-When the masked lightmaps are combined, we get the final lightmap.
+Each light is blended into the lightmap in the same way as the `screen` composite operation.
 
 <img src="docs/final-light-map.png" width="40%" border="1" />
+
+#### 5. Add up the specular highlights
+
+If specular maps are being used, each light's highlights are added together in a separate buffer. These are calculated from the light's height and a fixed camera direction, and are multiplied by the light that reaches the surface so that they fade with distance and are blocked by shadows.
+
+---
 
 If we take the un-lit scene...
 
@@ -379,27 +341,12 @@ If we take the un-lit scene...
 
 <img src="docs/final-scene-lighting.png" width="40%" border="1" />
 
-### Normal maps and specular maps
+The `multiply` composite operation can only darken the scene, so the specular highlights are then drawn over the top using the `lighter` composite operation. This means they can be brighter than the scene and appear on dark surfaces.
 
-When the shader is enabled, the steps above are the same except that lights aren't drawn into the masked lightmaps, so those only contain ambient light. All of the lights are then shaded using a single WebGL context, which has 2 passes:
+### Avoiding self-shadowing
 
-1. **Diffuse**: each light's lightmap is multiplied by how much light the surface receives compared to a flat surface, and then blended into the final lightmap in the same way as the `screen` composite operation. A flat surface is multiplied by 1, so it looks the same as it does without the shader. Lights are shaded separately, so the bumps from one light don't affect another light.
-2. **Specular**: each light's highlights are added together in a separate buffer. These are calculated from the light's height and a fixed camera direction, and are multiplied by the light's lightmap so that they fade with distance and are blocked by shadows.
+Looking up shadows at a surface's foot could make things shadow themselves, so there are 2 options for this.
 
-The final lightmap is drawn over the scene using the `multiply` composite operation, which can only darken the scene. The specular highlights are then drawn over the top using the `lighter` composite operation, so they can be brighter than the scene and appear on dark surfaces.
+`shadowBias` moves the lookup slightly towards the light. Walls only need a small amount, but actors stand inside the start of their own shadow so they need more. `addActor()` works this out from the actor's shadow.
 
-The scene's normal map, specular map, and masks are uploaded once per frame, and 3 lightmaps are uploaded for each visible light.
-
-### Why 2 wall layers?
-
-Because some wall shadow receivers might overlap. When a shadow caster overlaps a wall shadow receiver, we skip rendering shadows from that caster onto the overlapping receiver (so that objects don't self-shadow / shadows are _behind_ the objects that cast them).
-
-However, if there was just a single layer, then when 2 wall shadow receivers overlap they would be masked onto the same wall-mask. This can cause strange artefacts.
-
-<img src="docs/glitch-1.png" width="30%" border="1" />
-
-<img src="docs/glitch-2.png" width="30%" border="1" />
-
-By separating objects which might overlap onto separate layers, we can avoid this issue.
-
-As long as shadows aren't too large and we don't have too many objects overlapping (e.g. more than 2), then 2 layers should be enough.
+`projectShadows` should be false for anything that casts a sprite or circle shadow, otherwise looking further along the shadow for the upper part of the object would find its own shadow. `addActor()` sets this for you.

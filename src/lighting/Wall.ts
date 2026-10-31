@@ -61,7 +61,6 @@ export class Wall {
       ...this.frontRectangle(footprint),
     });
     this.top = lighting.addWallReceiver({
-      layer: options.layer,
       zIndex: options.zIndex,
       mergeable: options.mergeable,
       colour: top?.colour ?? Wall.DEFAULT_TOP_COLOUR,

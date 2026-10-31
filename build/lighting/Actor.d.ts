@@ -33,6 +33,10 @@ export declare class Actor {
     readonly caster: SpriteCaster | CircleCaster | null;
     private footprintHeight;
     constructor(lighting: LightingSystem, options: ActorOptions);
+    /**
+     * Get the distance that a caster's shadow reaches back towards the light
+     */
+    private casterBias;
     private footprint;
     /**
      * Move this actor to a new world position

@@ -10,7 +10,6 @@ export { SceneObject } from './SceneObject';
 export type { SceneObjectOptions } from './SceneObject';
 export { GroundReceiver, Surface, WallReceiver } from './Surface';
 export type { GroundReceiverOptions, SurfaceOptions, WallReceiverOptions, } from './Surface';
-export { WallShadowLayer } from './types';
 export type { LightingCamera, LightingImage, Rectangle } from './types';
 export { Wall } from './Wall';
 export type { WallOptions } from './Wall';

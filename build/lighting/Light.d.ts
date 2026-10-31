@@ -1,7 +1,6 @@
 import { vec } from '@basementuniverse/vec';
 import { CircleCaster, RegionCaster, SpriteCaster } from './Caster';
 import type { LightingSystem } from './LightingSystem';
-import { GroundReceiver, WallReceiver } from './Surface';
 import { Colour, Rectangle } from './types';
 export type LightOptions = {
     /**
@@ -54,12 +53,18 @@ export declare class Light {
     castShadows: boolean;
     lightCanvas: HTMLCanvasElement;
     private lightContext;
-    groundLightCanvas: HTMLCanvasElement;
-    private groundLightContext;
-    wallLight1Canvas: HTMLCanvasElement;
-    private wallLight1Context;
-    wallLight2Canvas: HTMLCanvasElement;
-    private wallLight2Context;
+    /**
+     * White where light reaches the ground, and black in the shadows of region
+     * casters
+     */
+    regionShadowCanvas: HTMLCanvasElement;
+    private regionShadowContext;
+    /**
+     * White where light reaches the ground, and black in the shadows of sprite
+     * and circle casters
+     */
+    objectShadowCanvas: HTMLCanvasElement;
+    private objectShadowContext;
     private dirty;
     constructor(lightingSystem: LightingSystem, options: LightOptions);
     /**
@@ -86,21 +91,15 @@ export declare class Light {
      * Remove this light from the lighting system
      */
     remove(): void;
-    prepare(groundShadowReceivers: GroundReceiver[], wallShadowReceivers: WallReceiver[], regionShadowCasters: RegionCaster[], spriteShadowCasters: SpriteCaster[], circleShadowCasters: CircleCaster[]): void;
+    prepare(regionCasters: RegionCaster[], spriteCasters: SpriteCaster[], circleCasters: CircleCaster[]): void;
     /**
-     * Make sure a light canvas matches this light's size
-     *
-     * There's no need to clear the canvas because the base lightmap is opaque,
-     * so drawing it replaces the previous frame
+     * Make sure a shadow canvas matches this light's size, and fill it with white
+     * so that nothing is in shadow
      */
-    private resetLightContext;
+    private resetShadowContext;
     private prepareLightMap;
-    private prepareFullWallShadows;
-    private prepareGroundRegionShadows;
-    private prepareGroundSpriteShadows;
-    private prepareGroundCircleShadows;
-    private prepareWallRegionShadows;
-    private prepareWallSpriteShadows;
-    private prepareWallCircleShadows;
+    private prepareRegionShadows;
+    private prepareSpriteShadows;
+    private prepareCircleShadows;
     private prepareRegionShadow;
 }

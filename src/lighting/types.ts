@@ -73,8 +73,3 @@ export enum Side {
   Bottom = 'bottom',
   Left = 'left',
 }
-
-export enum WallShadowLayer {
-  One = 'one',
-  Two = 'two',
-}

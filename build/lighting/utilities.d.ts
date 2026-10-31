@@ -26,13 +26,6 @@ export declare function lerpColour(a: Colour, b: Colour, i: number): {
     a: number;
 };
 /**
- * Calculate the x position of a line where it intercepts a given y
- *
- * Returns a tuple containing the intercept position and the normalised
- * progress along the line
- */
-export declare function lineYIntercept(line: Line, y: number, allowBefore?: boolean, allowAfter?: boolean): [number, number] | null;
-/**
  * Check if a line segment's normal is facing towards a point
  */
 export declare function lineIsFacing(line: Line, position: vec): boolean;
@@ -44,12 +37,6 @@ export declare function intervalToRectangle(interval: Interval2d): Rectangle;
  * Convert a rectangle to a 2d interval
  */
 export declare function rectangleToInterval(rectangle: Rectangle): Interval2d;
-/**
- * Find the overlap between 2 1d intervals
- *
- * If there is no overlap, return null
- */
-export declare function overlap1d(a: Interval1d, b: Interval1d): Interval1d | null;
 /**
  * Check if 2 AABBs intersect
  */

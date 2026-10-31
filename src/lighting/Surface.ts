@@ -1,12 +1,8 @@
 import { vec } from '@basementuniverse/vec';
 import type { LightingSystem } from './LightingSystem';
 import { SceneObject, SceneObjectOptions } from './SceneObject';
-import { LightingImage, WallShadowLayer } from './types';
-import {
-  boundingRectangle,
-  drawImageInRectangle,
-  silhouette,
-} from './utilities';
+import { LightingImage } from './types';
+import { boundingRectangle, drawImageInRectangle } from './utilities';
 
 type DrawCallback = (context: CanvasRenderingContext2D) => void;
 
@@ -64,15 +60,21 @@ export abstract class Surface<
   public zIndex: number = 0;
   public customDraw: NonNullable<SurfaceOptions['customDraw']> = {};
 
+  private customMaskContext: CanvasRenderingContext2D | null = null;
+
   /**
    * Should images be repeated across this surface, or stretched to fit?
    */
   public abstract repeat: boolean;
 
   /**
-   * Draw the part of this surface that receives lighting
+   * Get the image whose alpha channel decides which parts of this surface
+   * receive lighting
+   *
+   * Returns 'solid' if the whole surface receives lighting, or null if nothing
+   * does (for example if the image hasn't loaded yet)
    */
-  public abstract drawMask(context: CanvasRenderingContext2D): void;
+  public abstract getMask(): LightingImage | 'solid' | null;
 
   private fillBackground(context: CanvasRenderingContext2D, colour: string) {
     context.fillStyle = colour;
@@ -149,8 +151,21 @@ export abstract class Surface<
     );
   }
 
-  protected fillMask(context: CanvasRenderingContext2D) {
-    this.fillBackground(context, 'black');
+  /**
+   * Render a custom mask, relative to the position of this surface
+   */
+  protected renderCustomMask(draw: DrawCallback): HTMLCanvasElement {
+    this.customMaskContext ??= document
+      .createElement('canvas')
+      .getContext('2d')!;
+
+    const context = this.customMaskContext;
+    context.canvas.width = Math.ceil(this.size.x);
+    context.canvas.height = Math.ceil(this.size.y);
+    context.translate(-this.position.x, -this.position.y);
+    draw(context);
+
+    return context.canvas;
   }
 }
 
@@ -169,23 +184,19 @@ export class GroundReceiver extends Surface<GroundReceiverOptions> {
     this.set(options);
   }
 
-  public drawMask(context: CanvasRenderingContext2D) {
+  public getMask(): LightingImage | 'solid' | null {
     if (this.customDraw.mask) {
-      this.customDraw.mask(context);
-      return;
+      return this.renderCustomMask(this.customDraw.mask);
     }
 
-    context.save();
-    this.fillMask(context);
-    context.restore();
+    return 'solid';
   }
 }
 
 export type WallReceiverOptions = SurfaceOptions & {
   /**
-   * Image used to mask this surface, it should be black with an alpha channel
-   *
-   * If this isn't set then we'll use the image's alpha channel
+   * Image whose alpha channel decides which parts of this surface receive
+   * lighting, the default is the alpha channel of `image`
    */
   mask?: LightingImage | null;
 
@@ -207,9 +218,17 @@ export type WallReceiverOptions = SurfaceOptions & {
   surfaceNormal?: vec;
 
   /**
-   * Use a different layer for surfaces that might overlap
+   * How far towards the light to look for shadows on the ground, in world
+   * units. This should be enough to get out of the surface's own shadow
    */
-  layer?: WallShadowLayer;
+  shadowBias?: number;
+
+  /**
+   * Should sprite and circle shadows climb this surface? This should be false
+   * for anything that casts one of these shadows, otherwise it will be in its
+   * own shadow
+   */
+  projectShadows?: boolean;
 };
 
 /**
@@ -220,33 +239,27 @@ export class WallReceiver extends Surface<WallReceiverOptions> {
   public repeat = false;
   public receiveLight: boolean = true;
   public surfaceNormal: vec = vec();
-  public layer: WallShadowLayer = WallShadowLayer.One;
+  public shadowBias: number = 1;
+  public projectShadows: boolean = true;
 
   public constructor(lighting: LightingSystem, options: WallReceiverOptions) {
     super(lighting, options);
     this.set(options);
   }
 
-  public drawMask(context: CanvasRenderingContext2D) {
+  public getMask(): LightingImage | 'solid' | null {
     if (this.customDraw.mask) {
-      this.customDraw.mask(context);
-      return;
+      return this.renderCustomMask(this.customDraw.mask);
     }
 
-    context.save();
-
+    // A background colour covers the whole surface
     if (this.colour) {
-      this.fillMask(context);
+      return 'solid';
     }
 
-    // A background colour already covers the whole surface
-    const mask =
-      this.mask ?? (!this.colour && this.image && silhouette(this.image));
-    if (mask) {
-      this.drawImage(context, mask);
-    }
+    const mask = this.mask ?? this.image;
 
-    context.restore();
+    return mask && mask.width > 0 && mask.height > 0 ? mask : null;
   }
 
   /**
@@ -270,7 +283,8 @@ export class WallReceiver extends Surface<WallReceiverOptions> {
       this.repeat === other.repeat &&
       this.receiveLight === other.receiveLight &&
       vec.eq(this.surfaceNormal, other.surfaceNormal) &&
-      this.layer === other.layer
+      this.shadowBias === other.shadowBias &&
+      this.projectShadows === other.projectShadows
     );
   }
 

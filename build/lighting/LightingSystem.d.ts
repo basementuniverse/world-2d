@@ -26,9 +26,9 @@ export type LightingSystemOptions = {
      */
     softShadowsAmount: number;
     /**
-     * Should the shader be enabled?
+     * Should normal maps and specular maps be used?
      */
-    shaderEnabled: boolean;
+    surfaceMapsEnabled: boolean;
     /**
      * Strength of highlights from normal maps
      */
@@ -80,18 +80,10 @@ export type LightingSystemOptions = {
      */
     wallLightingCutoffDistance: number;
     /**
-     * Length of sprite wall shadows will be scaled by this amount
+     * How far sprite and circle shadows climb walls, as a fraction of the length
+     * of the shadow that reaches the wall
      */
-    spriteWallShadowLengthFactor: number;
-    /**
-     * Sprite wall shadow intercept will be offset by this amount (as a factor
-     * of the total edge length)
-     */
-    spriteWallShadowInterceptOffset: number;
-    /**
-     * Height of circle wall shadows will be scaled by this amount
-     */
-    circleWallShadowLengthFactor: number;
+    wallShadowLengthFactor: number;
 };
 export declare class LightingSystem {
     private static readonly DEFAULT_OPTIONS;
@@ -108,18 +100,6 @@ export declare class LightingSystem {
     private regionCasters;
     private spriteCasters;
     private circleCasters;
-    private groundMaskContext;
-    groundMaskCanvas: HTMLCanvasElement;
-    private groundMaskedLightMapContext;
-    groundMaskedLightMapCanvas: HTMLCanvasElement;
-    private wallMask1Context;
-    wallMask1Canvas: HTMLCanvasElement;
-    private wallMaskedLightMap1Context;
-    wallMaskedLightMap1Canvas: HTMLCanvasElement;
-    private wallMask2Context;
-    wallMask2Canvas: HTMLCanvasElement;
-    private wallMaskedLightMap2Context;
-    wallMaskedLightMap2Canvas: HTMLCanvasElement;
     private lightMapContext;
     lightMapCanvas: HTMLCanvasElement;
     private specularLightMapContext;
@@ -183,7 +163,7 @@ export declare class LightingSystem {
      */
     optimise(onMerge?: (merged: WallReceiver | RegionCaster, a: WallReceiver | RegionCaster, b: WallReceiver | RegionCaster) => void): void;
     /**
-     * Get the shader pass, if the shader is enabled and it can be used
+     * Get the shader pass, if it can be used
      */
     private getShaderPass;
     /**
@@ -205,8 +185,21 @@ export declare class LightingSystem {
     private sortSurfaces;
     /**
      * Prepare the lightmaps for rendering
+     *
+     * If WebGL isn't available then lightmaps are left as they are, so the scene
+     * keeps its last lighting when the context is lost and then restored
      */
     prepare(camera: LightingCamera, screen: vec): void;
+    /**
+     * Get a canvas showing which surface is at each pixel, for debugging
+     *
+     * This should be drawn straight away, because the canvas is reused
+     */
+    getSurfaceMapCanvas(): HTMLCanvasElement;
+    /**
+     * Find the ambient light on each surface
+     */
+    private calculateAmbientLights;
     /**
      * Calculate the actual colour of ambient light based on the surface normal
      */

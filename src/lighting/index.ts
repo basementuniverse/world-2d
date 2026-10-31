@@ -19,7 +19,6 @@ export type {
   SurfaceOptions,
   WallReceiverOptions,
 } from './Surface';
-export { WallShadowLayer } from './types';
 export type { LightingCamera, LightingImage, Rectangle } from './types';
 export { Wall } from './Wall';
 export type { WallOptions } from './Wall';

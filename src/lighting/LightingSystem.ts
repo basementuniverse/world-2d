@@ -13,7 +13,7 @@ import {
 import { Light, LightOptions } from './Light';
 import { merge } from './merge';
 import { SceneObject } from './SceneObject';
-import { ShaderPass } from './ShaderPass';
+import { ShaderPass, ShaderSurface } from './ShaderPass';
 import {
   GroundReceiver,
   GroundReceiverOptions,
@@ -21,9 +21,8 @@ import {
   WallReceiver,
   WallReceiverOptions,
 } from './Surface';
-import { Colour, LightingCamera, WallShadowLayer } from './types';
+import { Colour, LightingCamera } from './types';
 import {
-  colourToString,
   intervalToRectangle,
   lerpColour,
   rectanglesIntersect,
@@ -53,9 +52,9 @@ export type LightingSystemOptions = {
   softShadowsAmount: number;
 
   /**
-   * Should the shader be enabled?
+   * Should normal maps and specular maps be used?
    */
-  shaderEnabled: boolean;
+  surfaceMapsEnabled: boolean;
 
   /**
    * Strength of highlights from normal maps
@@ -120,20 +119,10 @@ export type LightingSystemOptions = {
   wallLightingCutoffDistance: number;
 
   /**
-   * Length of sprite wall shadows will be scaled by this amount
+   * How far sprite and circle shadows climb walls, as a fraction of the length
+   * of the shadow that reaches the wall
    */
-  spriteWallShadowLengthFactor: number;
-
-  /**
-   * Sprite wall shadow intercept will be offset by this amount (as a factor
-   * of the total edge length)
-   */
-  spriteWallShadowInterceptOffset: number;
-
-  /**
-   * Height of circle wall shadows will be scaled by this amount
-   */
-  circleWallShadowLengthFactor: number;
+  wallShadowLengthFactor: number;
 };
 
 export class LightingSystem {
@@ -141,7 +130,7 @@ export class LightingSystem {
     imageSmoothingEnabled: true,
     softShadowsEnabled: false,
     softShadowsAmount: 2,
-    shaderEnabled: false,
+    surfaceMapsEnabled: true,
     shaderHighlightStrength: 0.5,
     shaderShadowStrength: 0.5,
     shaderSpecularStrength: 1,
@@ -154,9 +143,7 @@ export class LightingSystem {
     ambientLightDirection: 0,
     wallLightingYOffset: -30,
     wallLightingCutoffDistance: 20,
-    spriteWallShadowLengthFactor: 0.75,
-    spriteWallShadowInterceptOffset: 0.1,
-    circleWallShadowLengthFactor: 0.5,
+    wallShadowLengthFactor: 0.75,
   };
 
   private static createContext(): CanvasRenderingContext2D {
@@ -183,24 +170,6 @@ export class LightingSystem {
   private regionCasters: RegionCaster[] = [];
   private spriteCasters: SpriteCaster[] = [];
   private circleCasters: CircleCaster[] = [];
-
-  private groundMaskContext = LightingSystem.createContext();
-  public groundMaskCanvas = this.groundMaskContext.canvas;
-
-  private groundMaskedLightMapContext = LightingSystem.createContext();
-  public groundMaskedLightMapCanvas = this.groundMaskedLightMapContext.canvas;
-
-  private wallMask1Context = LightingSystem.createContext();
-  public wallMask1Canvas = this.wallMask1Context.canvas;
-
-  private wallMaskedLightMap1Context = LightingSystem.createContext();
-  public wallMaskedLightMap1Canvas = this.wallMaskedLightMap1Context.canvas;
-
-  private wallMask2Context = LightingSystem.createContext();
-  public wallMask2Canvas = this.wallMask2Context.canvas;
-
-  private wallMaskedLightMap2Context = LightingSystem.createContext();
-  public wallMaskedLightMap2Canvas = this.wallMaskedLightMap2Context.canvas;
 
   private lightMapContext = LightingSystem.createContext();
   public lightMapCanvas = this.lightMapContext.canvas;
@@ -341,13 +310,9 @@ export class LightingSystem {
   }
 
   /**
-   * Get the shader pass, if the shader is enabled and it can be used
+   * Get the shader pass, if it can be used
    */
   private getShaderPass(): ShaderPass | null {
-    if (!this.options.shaderEnabled) {
-      return null;
-    }
-
     this.shaderPass ??= new ShaderPass();
 
     return this.shaderPass.available ? this.shaderPass : null;
@@ -409,267 +374,76 @@ export class LightingSystem {
 
   /**
    * Prepare the lightmaps for rendering
+   *
+   * If WebGL isn't available then lightmaps are left as they are, so the scene
+   * keeps its last lighting when the context is lost and then restored
    */
   public prepare(camera: LightingCamera, screen: vec) {
     this.screen = screen;
     this.sortSurfaces();
 
     const shaderPass = this.getShaderPass();
+    if (!shaderPass) {
+      return;
+    }
+
+    const cameraRectangle = intervalToRectangle(camera.bounds);
+    const surfaces = [...this.groundReceivers, ...this.wallReceivers].filter(
+      surface => rectanglesIntersect(surface, cameraRectangle)
+    );
+
+    const { surfaceMapsEnabled } = this.options;
+    const hasNormalMaps =
+      surfaceMapsEnabled &&
+      surfaces.some(
+        surface => surface.normalMap || surface.customDraw.normalMap
+      );
     const hasSpecularMaps =
-      shaderPass !== null &&
-      [...this.groundReceivers, ...this.wallReceivers].some(
+      surfaceMapsEnabled &&
+      surfaces.some(
         surface => surface.specularMap || surface.customDraw.specularMap
       );
 
-    if (shaderPass) {
-      this.drawSceneNormalMap(camera);
+    if (hasNormalMaps) {
+      this.drawSceneNormalMap(camera, surfaces);
     }
     if (hasSpecularMaps) {
-      this.drawSceneSpecularMap(camera);
+      this.drawSceneSpecularMap(camera, surfaces);
     }
 
-    // Pre-calculate ambient light parameters
-    const ambientLightDirection = vec.rot(
-      vec(1, 0),
-      this.options.ambientLightDirection
-    );
-    const ambientLightColour = parseColor(this.options.ambientLightColour);
-    const ambientLightShadowColour = parseColor(
-      this.options.ambientLightShadowColour
-    );
-    const ambientLightHighlightColour = parseColor(
-      this.options.ambientLightHighlightColour
-    );
-
     // Lights outside the camera bounds can't affect the visible scene
-    const cameraRectangle = intervalToRectangle(camera.bounds);
     const visibleLights = this.lights.filter(light =>
       rectanglesIntersect(light.bounds, cameraRectangle)
     );
 
-    // The shader blends lights into the light map itself
-    const canvasLights = shaderPass ? [] : visibleLights;
-
-    // Prepare each light
     visibleLights.forEach(light =>
-      light.prepare(
-        this.groundReceivers,
-        this.wallReceivers,
-        this.regionCasters,
-        this.spriteCasters,
-        this.circleCasters
-      )
+      light.prepare(this.regionCasters, this.spriteCasters, this.circleCasters)
     );
 
-    // Prepare ground mask
-    this.resetContext(this.groundMaskContext);
-    this.groundMaskContext.save();
-    camera.setTransforms(this.groundMaskContext);
-
-    this.groundReceivers.forEach(ground => {
-      ground.drawMask(this.groundMaskContext);
+    shaderPass.render({
+      camera,
+      screen,
+      lights: visibleLights,
+      surfaces: this.calculateAmbientLights(surfaces),
+      normalMap: hasNormalMaps ? this.sceneNormalMapCanvas : null,
+      specularMap: hasSpecularMaps ? this.sceneSpecularMapCanvas : null,
+      imageSmoothingEnabled: this.options.imageSmoothingEnabled,
+      wallLightingYOffset: this.options.wallLightingYOffset,
+      wallLightingCutoffDistance: this.options.wallLightingCutoffDistance,
+      wallShadowLengthFactor: this.options.wallShadowLengthFactor,
+      highlightStrength: this.options.shaderHighlightStrength,
+      shadowStrength: this.options.shaderShadowStrength,
+      specularStrength: this.options.shaderSpecularStrength,
+      shininess: this.options.shaderShininess,
+      viewTilt: this.options.shaderViewTilt,
+      banding: this.options.shaderBanding,
     });
 
-    this.groundMaskContext.globalCompositeOperation = 'destination-out';
-
-    this.wallReceivers.forEach(wall => {
-      wall.drawMask(this.groundMaskContext);
-    });
-
-    this.groundMaskContext.restore();
-
-    // Prepare wall mask 1
-    this.resetContext(this.wallMask1Context);
-    this.wallMask1Context.save();
-    camera.setTransforms(this.wallMask1Context);
-
-    this.wallReceivers.forEach(wall => {
-      if (wall.layer === WallShadowLayer.One) {
-        wall.drawMask(this.wallMask1Context);
-      }
-    });
-
-    this.wallMask1Context.globalCompositeOperation = 'destination-out';
-
-    this.wallReceivers.forEach(wall => {
-      if (wall.layer === WallShadowLayer.Two) {
-        wall.drawMask(this.wallMask1Context);
-      }
-    });
-
-    this.wallMask1Context.restore();
-
-    // Prepare wall mask 2
-    this.resetContext(this.wallMask2Context);
-    this.wallMask2Context.save();
-    camera.setTransforms(this.wallMask2Context);
-
-    this.wallReceivers.forEach(wall => {
-      if (wall.layer === WallShadowLayer.Two) {
-        wall.drawMask(this.wallMask2Context);
-      }
-    });
-
-    this.wallMask2Context.restore();
-
-    // Prepare ground-masked lightmap canvas
-    this.resetContext(this.groundMaskedLightMapContext);
-    this.groundMaskedLightMapContext.save();
-    camera.setTransforms(this.groundMaskedLightMapContext);
-
-    const { top, bottom, left, right } = camera.bounds;
-    this.groundMaskedLightMapContext.fillStyle =
-      this.options.ambientLightColour;
-    this.groundMaskedLightMapContext.fillRect(
-      left,
-      top,
-      right - left,
-      bottom - top
-    );
-
-    // Draw lights
-    this.groundMaskedLightMapContext.globalCompositeOperation = 'screen';
-    canvasLights.forEach(light => {
-      this.groundMaskedLightMapContext.drawImage(
-        light.groundLightCanvas,
-        light.position.x - light.radius,
-        light.position.y - light.radius
-      );
-    });
-
-    // Mask ground
-    this.groundMaskedLightMapContext.save();
-    this.groundMaskedLightMapContext.setTransform(1, 0, 0, 1, 0, 0);
-    this.groundMaskedLightMapContext.globalCompositeOperation =
-      'destination-atop';
-    this.groundMaskedLightMapContext.drawImage(this.groundMaskCanvas, 0, 0);
-    this.groundMaskedLightMapContext.restore();
-    this.groundMaskedLightMapContext.restore();
-
-    // Prepare wall-masked lightmap layer 1 canvas
-    this.resetContext(this.wallMaskedLightMap1Context);
-    this.wallMaskedLightMap1Context.save();
-    camera.setTransforms(this.wallMaskedLightMap1Context);
-
-    this.wallReceivers.forEach(wall => {
-      if (wall.layer === WallShadowLayer.One) {
-        this.wallMaskedLightMap1Context.fillStyle = colourToString(
-          this.calculateAmbientLight(
-            wall.surfaceNormal,
-            ambientLightDirection,
-            ambientLightColour,
-            ambientLightShadowColour,
-            ambientLightHighlightColour
-          )
-        );
-        this.wallMaskedLightMap1Context.fillRect(
-          wall.position.x,
-          wall.position.y,
-          wall.size.x,
-          wall.size.y
-        );
-      }
-    });
-
-    // Draw lights
-    this.wallMaskedLightMap1Context.globalCompositeOperation = 'screen';
-    canvasLights.forEach(light => {
-      this.wallMaskedLightMap1Context.drawImage(
-        light.wallLight1Canvas,
-        light.position.x - light.radius,
-        light.position.y - light.radius + this.options.wallLightingYOffset
-      );
-    });
-
-    // Prepare wall-masked lightmap 2 canvas
-    this.resetContext(this.wallMaskedLightMap2Context);
-    this.wallMaskedLightMap2Context.save();
-    camera.setTransforms(this.wallMaskedLightMap2Context);
-
-    this.wallReceivers.forEach(wall => {
-      if (wall.layer === WallShadowLayer.Two) {
-        this.wallMaskedLightMap2Context.fillStyle = colourToString(
-          this.calculateAmbientLight(
-            wall.surfaceNormal,
-            ambientLightDirection,
-            ambientLightColour,
-            ambientLightShadowColour,
-            ambientLightHighlightColour
-          )
-        );
-        this.wallMaskedLightMap2Context.fillRect(
-          wall.position.x,
-          wall.position.y,
-          wall.size.x,
-          wall.size.y
-        );
-      }
-    });
-
-    // Draw lights
-    this.wallMaskedLightMap2Context.globalCompositeOperation = 'screen';
-    canvasLights.forEach(light => {
-      this.wallMaskedLightMap2Context.drawImage(
-        light.wallLight2Canvas,
-        light.position.x - light.radius,
-        light.position.y - light.radius + this.options.wallLightingYOffset
-      );
-    });
-
-    // Mask walls layer 1
-    this.wallMaskedLightMap1Context.save();
-    this.wallMaskedLightMap1Context.setTransform(1, 0, 0, 1, 0, 0);
-    this.wallMaskedLightMap1Context.globalCompositeOperation =
-      'destination-atop';
-    this.wallMaskedLightMap1Context.drawImage(this.wallMask1Canvas, 0, 0);
-    this.wallMaskedLightMap1Context.restore();
-    this.wallMaskedLightMap1Context.restore();
-
-    // Mask walls layer 2
-    this.wallMaskedLightMap2Context.save();
-    this.wallMaskedLightMap2Context.setTransform(1, 0, 0, 1, 0, 0);
-    this.wallMaskedLightMap2Context.globalCompositeOperation =
-      'destination-atop';
-    this.wallMaskedLightMap2Context.drawImage(this.wallMask2Canvas, 0, 0);
-    this.wallMaskedLightMap2Context.restore();
-    this.wallMaskedLightMap2Context.restore();
-
-    // Prepare final lightmap
     this.resetContext(this.lightMapContext);
-    this.lightMapContext.save();
-    this.lightMapContext.drawImage(this.groundMaskedLightMapCanvas, 0, 0);
-    this.lightMapContext.drawImage(this.wallMaskedLightMap1Canvas, 0, 0);
-    this.lightMapContext.drawImage(this.wallMaskedLightMap2Canvas, 0, 0);
-
-    this.lightMapContext.restore();
+    this.lightMapContext.drawImage(shaderPass.canvas, 0, 0);
 
     this.specularVisible = hasSpecularMaps;
-    if (shaderPass) {
-      shaderPass.render({
-        camera,
-        screen,
-        lights: visibleLights,
-        ambientLightMap: this.lightMapCanvas,
-        normalMap: this.sceneNormalMapCanvas,
-        specularMap: hasSpecularMaps ? this.sceneSpecularMapCanvas : null,
-        groundMask: this.groundMaskCanvas,
-        wall1Mask: this.wallMask1Canvas,
-        wall2Mask: this.wallMask2Canvas,
-        imageSmoothingEnabled: this.options.imageSmoothingEnabled,
-        wallLightingYOffset: this.options.wallLightingYOffset,
-        highlightStrength: this.options.shaderHighlightStrength,
-        shadowStrength: this.options.shaderShadowStrength,
-        specularStrength: this.options.shaderSpecularStrength,
-        shininess: this.options.shaderShininess,
-        viewTilt: this.options.shaderViewTilt,
-        banding: this.options.shaderBanding,
-      });
-
-      this.resetContext(this.lightMapContext);
-      this.lightMapContext.drawImage(shaderPass.canvas, 0, 0);
-    }
-
-    if (shaderPass && hasSpecularMaps) {
+    if (hasSpecularMaps) {
       shaderPass.showSpecular(screen);
 
       // Highlights can only appear on the surfaces in the light map
@@ -680,6 +454,41 @@ export class LightingSystem {
       this.specularLightMapContext.drawImage(this.lightMapCanvas, 0, 0);
       this.specularLightMapContext.restore();
     }
+  }
+
+  /**
+   * Get a canvas showing which surface is at each pixel, for debugging
+   *
+   * This should be drawn straight away, because the canvas is reused
+   */
+  public getSurfaceMapCanvas(): HTMLCanvasElement {
+    this.shaderPass?.showSurfaces(this.screen);
+
+    return this.shaderPass?.canvas ?? this.lightMapCanvas;
+  }
+
+  /**
+   * Find the ambient light on each surface
+   */
+  private calculateAmbientLights(surfaces: Surface<any>[]): ShaderSurface[] {
+    const direction = vec.rot(vec(1, 0), this.options.ambientLightDirection);
+    const ambientLight = parseColor(this.options.ambientLightColour);
+    const shadow = parseColor(this.options.ambientLightShadowColour);
+    const highlight = parseColor(this.options.ambientLightHighlightColour);
+
+    return surfaces.map(surface => ({
+      surface,
+      ambientLight:
+        surface instanceof WallReceiver
+          ? this.calculateAmbientLight(
+              surface.surfaceNormal,
+              direction,
+              ambientLight,
+              shadow,
+              highlight
+            )
+          : ambientLight,
+    }));
   }
 
   /**
@@ -747,16 +556,13 @@ export class LightingSystem {
   /**
    * Draw normal maps for surfaces in the scene
    */
-  private drawSceneNormalMap(camera: LightingCamera) {
+  private drawSceneNormalMap(camera: LightingCamera, surfaces: Surface<any>[]) {
     this.resetContext(this.sceneNormalMapContext);
     this.sceneNormalMapContext.save();
     camera.setTransforms(this.sceneNormalMapContext);
 
-    this.groundReceivers.forEach(ground => {
-      ground.drawNormalMap(this.sceneNormalMapContext);
-    });
-    this.wallReceivers.forEach(wall => {
-      wall.drawNormalMap(this.sceneNormalMapContext);
+    surfaces.forEach(surface => {
+      surface.drawNormalMap(this.sceneNormalMapContext);
     });
 
     this.sceneNormalMapContext.restore();
@@ -765,16 +571,16 @@ export class LightingSystem {
   /**
    * Draw specular maps for surfaces in the scene
    */
-  private drawSceneSpecularMap(camera: LightingCamera) {
+  private drawSceneSpecularMap(
+    camera: LightingCamera,
+    surfaces: Surface<any>[]
+  ) {
     this.resetContext(this.sceneSpecularMapContext);
     this.sceneSpecularMapContext.save();
     camera.setTransforms(this.sceneSpecularMapContext);
 
-    this.groundReceivers.forEach(ground => {
-      ground.drawSpecularMap(this.sceneSpecularMapContext);
-    });
-    this.wallReceivers.forEach(wall => {
-      wall.drawSpecularMap(this.sceneSpecularMapContext);
+    surfaces.forEach(surface => {
+      surface.drawSpecularMap(this.sceneSpecularMapContext);
     });
 
     this.sceneSpecularMapContext.restore();

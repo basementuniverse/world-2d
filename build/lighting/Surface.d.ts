@@ -1,7 +1,7 @@
 import { vec } from '@basementuniverse/vec';
 import type { LightingSystem } from './LightingSystem';
 import { SceneObject, SceneObjectOptions } from './SceneObject';
-import { LightingImage, WallShadowLayer } from './types';
+import { LightingImage } from './types';
 type DrawCallback = (context: CanvasRenderingContext2D) => void;
 export type SurfaceOptions = SceneObjectOptions & {
     /**
@@ -47,21 +47,29 @@ export declare abstract class Surface<Options extends SurfaceOptions> extends Sc
     specularMap: LightingImage | null;
     zIndex: number;
     customDraw: NonNullable<SurfaceOptions['customDraw']>;
+    private customMaskContext;
     /**
      * Should images be repeated across this surface, or stretched to fit?
      */
     abstract repeat: boolean;
     /**
-     * Draw the part of this surface that receives lighting
+     * Get the image whose alpha channel decides which parts of this surface
+     * receive lighting
+     *
+     * Returns 'solid' if the whole surface receives lighting, or null if nothing
+     * does (for example if the image hasn't loaded yet)
      */
-    abstract drawMask(context: CanvasRenderingContext2D): void;
+    abstract getMask(): LightingImage | 'solid' | null;
     private fillBackground;
     protected drawImage(context: CanvasRenderingContext2D, image: LightingImage): void;
     draw(context: CanvasRenderingContext2D): void;
     protected drawColourMap(context: CanvasRenderingContext2D, image: LightingImage | null, defaultColour: string): void;
     drawNormalMap(context: CanvasRenderingContext2D): void;
     drawSpecularMap(context: CanvasRenderingContext2D): void;
-    protected fillMask(context: CanvasRenderingContext2D): void;
+    /**
+     * Render a custom mask, relative to the position of this surface
+     */
+    protected renderCustomMask(draw: DrawCallback): HTMLCanvasElement;
 }
 export type GroundReceiverOptions = SurfaceOptions;
 /**
@@ -72,13 +80,12 @@ export type GroundReceiverOptions = SurfaceOptions;
 export declare class GroundReceiver extends Surface<GroundReceiverOptions> {
     repeat: boolean;
     constructor(lighting: LightingSystem, options: GroundReceiverOptions);
-    drawMask(context: CanvasRenderingContext2D): void;
+    getMask(): LightingImage | 'solid' | null;
 }
 export type WallReceiverOptions = SurfaceOptions & {
     /**
-     * Image used to mask this surface, it should be black with an alpha channel
-     *
-     * If this isn't set then we'll use the image's alpha channel
+     * Image whose alpha channel decides which parts of this surface receive
+     * lighting, the default is the alpha channel of `image`
      */
     mask?: LightingImage | null;
     /**
@@ -96,9 +103,16 @@ export type WallReceiverOptions = SurfaceOptions & {
      */
     surfaceNormal?: vec;
     /**
-     * Use a different layer for surfaces that might overlap
+     * How far towards the light to look for shadows on the ground, in world
+     * units. This should be enough to get out of the surface's own shadow
      */
-    layer?: WallShadowLayer;
+    shadowBias?: number;
+    /**
+     * Should sprite and circle shadows climb this surface? This should be false
+     * for anything that casts one of these shadows, otherwise it will be in its
+     * own shadow
+     */
+    projectShadows?: boolean;
 };
 /**
  * A rectangle or sprite that receives wall shadows
@@ -108,9 +122,10 @@ export declare class WallReceiver extends Surface<WallReceiverOptions> {
     repeat: boolean;
     receiveLight: boolean;
     surfaceNormal: vec;
-    layer: WallShadowLayer;
+    shadowBias: number;
+    projectShadows: boolean;
     constructor(lighting: LightingSystem, options: WallReceiverOptions);
-    drawMask(context: CanvasRenderingContext2D): void;
+    getMask(): LightingImage | 'solid' | null;
     /**
      * Check if this surface can be merged with another surface
      */

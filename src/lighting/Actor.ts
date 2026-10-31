@@ -7,7 +7,7 @@ import {
 } from './Caster';
 import type { LightingSystem } from './LightingSystem';
 import { WallReceiver, WallReceiverOptions } from './Surface';
-import { Rectangle, WallShadowLayer } from './types';
+import { Rectangle } from './types';
 
 type ActorShadowOptions = {
   /**
@@ -58,10 +58,9 @@ export class Actor {
     this.footprintHeight =
       footprintHeight ?? options.size.y * Actor.DEFAULT_FOOTPRINT_SCALE;
 
-    // Actors stand in front of walls, so they need their own wall layer
     this.surface = lighting.addWallReceiver({
-      layer: WallShadowLayer.Two,
       mergeable: false,
+      projectShadows: false,
       ...surface,
     });
 
@@ -84,6 +83,24 @@ export class Actor {
         ...footprint,
       });
     }
+
+    // Look for shadows from far enough away to avoid our own shadow
+    if (this.caster && options.shadowBias === undefined) {
+      this.surface.shadowBias = this.casterBias(this.caster);
+    }
+  }
+
+  /**
+   * Get the distance that a caster's shadow reaches back towards the light
+   */
+  private casterBias(caster: SpriteCaster | CircleCaster): number {
+    if (caster instanceof SpriteCaster) {
+      const length = caster.maxShadowLength ?? caster.minShadowLength;
+
+      return length * (1 - caster.offset.y) + 1;
+    }
+
+    return Math.max(caster.size.x, caster.size.y) / 2 + 1;
   }
 
   private footprint(position: vec, size: vec): Rectangle {

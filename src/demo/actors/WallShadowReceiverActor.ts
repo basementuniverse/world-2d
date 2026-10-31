@@ -2,13 +2,11 @@ import ContentManager from '@basementuniverse/content-manager';
 import { exclude } from '@basementuniverse/utils';
 import { vec } from '@basementuniverse/vec';
 import { v4 as uuid } from 'uuid';
-import {
-  WallReceiver,
-  WallReceiverOptions,
-  WallShadowLayer,
-} from '../../lighting';
+import { WallReceiver, WallReceiverOptions } from '../../lighting';
 import { LightingScene } from '../scenes/LightingScene';
 import { EditorActor } from './EditorActor';
+
+const LEGACY_ACTOR_SHADOW_BIAS = 12;
 
 export class WallShadowReceiverActor extends EditorActor {
   public readonly type = 'WallShadowReceiver';
@@ -29,7 +27,8 @@ export class WallShadowReceiverActor extends EditorActor {
   public normalMapName: string = 'wall1-normal';
   public specularMapName: string = '';
   public spriteRepeat: boolean = false;
-  public layer: WallShadowLayer = WallShadowLayer.One;
+  public shadowBias: number = 1;
+  public projectShadows: boolean = true;
 
   public constructor(
     scene: LightingScene,
@@ -62,7 +61,8 @@ export class WallShadowReceiverActor extends EditorActor {
     this.folder.add(this, 'normalMapName');
     this.folder.add(this, 'specularMapName');
     this.folder.add(this, 'spriteRepeat');
-    this.folder.add(this, 'layer', Object.values(WallShadowLayer));
+    this.folder.add(this, 'shadowBias', 0, 32, 1);
+    this.folder.add(this, 'projectShadows');
   }
 
   private objectOptions(): WallReceiverOptions {
@@ -80,7 +80,8 @@ export class WallShadowReceiverActor extends EditorActor {
       specularMap:
         ContentManager.get<HTMLImageElement>(this.specularMapName) ?? null,
       repeat: this.spriteRepeat,
-      layer: this.layer,
+      shadowBias: this.shadowBias,
+      projectShadows: this.projectShadows,
     };
   }
 
@@ -103,7 +104,8 @@ export class WallShadowReceiverActor extends EditorActor {
       normalMapName: this.normalMapName,
       specularMapName: this.specularMapName,
       spriteRepeat: this.spriteRepeat,
-      layer: this.layer,
+      shadowBias: this.shadowBias,
+      projectShadows: this.projectShadows,
     };
   }
 
@@ -111,7 +113,16 @@ export class WallShadowReceiverActor extends EditorActor {
     scene: LightingScene,
     data: any
   ): WallShadowReceiverActor {
-    return new WallShadowReceiverActor(scene, data);
+    // Older scenes put anything that casts a shadow in a second wall layer
+    if (data.layer === 'two') {
+      return new WallShadowReceiverActor(scene, {
+        ...exclude(data, 'layer'),
+        shadowBias: LEGACY_ACTOR_SHADOW_BIAS,
+        projectShadows: false,
+      });
+    }
+
+    return new WallShadowReceiverActor(scene, exclude(data, 'layer'));
   }
 
   /**

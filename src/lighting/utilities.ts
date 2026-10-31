@@ -65,33 +65,6 @@ export function lerpColour(a: Colour, b: Colour, i: number) {
 }
 
 /**
- * Calculate the x position of a line where it intercepts a given y
- *
- * Returns a tuple containing the intercept position and the normalised
- * progress along the line
- */
-export function lineYIntercept(
-  line: Line,
-  y: number,
-  allowBefore: boolean = true,
-  allowAfter: boolean = true
-): [number, number] | null {
-  if (floatEquals(line.start.y, line.end.y)) {
-    return null;
-  }
-
-  const t = (y - line.start.y) / (line.end.y - line.start.y);
-  if (t < 0 && !allowBefore) {
-    return null;
-  }
-  if (t > 1 && !allowAfter) {
-    return null;
-  }
-
-  return [line.start.x + t * (line.end.x - line.start.x), t];
-}
-
-/**
  * Check if a line segment's normal is facing towards a point
  */
 export function lineIsFacing(line: Line, position: vec) {
@@ -123,22 +96,6 @@ export function rectangleToInterval(rectangle: Rectangle): Interval2d {
     right: rectangle.position.x + rectangle.size.x,
     top: rectangle.position.y,
     bottom: rectangle.position.y + rectangle.size.y,
-  };
-}
-
-/**
- * Find the overlap between 2 1d intervals
- *
- * If there is no overlap, return null
- */
-export function overlap1d(a: Interval1d, b: Interval1d): Interval1d | null {
-  if (a.end < b.start || a.start > b.end) {
-    return null;
-  }
-
-  return {
-    start: Math.max(a.start, b.start),
-    end: Math.min(a.end, b.end),
   };
 }
 

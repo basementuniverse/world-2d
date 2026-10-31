@@ -17,16 +17,10 @@ import { sortActors } from '../utilities';
 enum LightingSceneRenderMode {
   NoLighting = 'nolighting',
   Normal = 'normal',
-  GroundMask = 'groundmask',
-  WallMask1 = 'wallmask1',
-  WallMask2 = 'wallmask2',
-  GroundMaskedLightMap = 'groundmaskedlightmap',
-  WallMaskedLightMap1 = 'wallmaskedlightmap1',
-  WallMaskedLightMap2 = 'wallmaskedlightmap2',
+  SurfaceMap = 'surfacemap',
   SelectedLightMap = 'selected-light',
-  SelectedGroundLightMap = 'selected-ground',
-  SelectedWall1LightMap = 'selected-wall1',
-  SelectedWall2LightMap = 'selected-wall2',
+  SelectedRegionShadowMap = 'selected-region-shadows',
+  SelectedObjectShadowMap = 'selected-object-shadows',
   LightMap = 'lightmap',
   SpecularLightMap = 'specularlightmap',
   SceneNormalMap = 'scenenormalmap',
@@ -74,7 +68,6 @@ export class LightingScene extends Scene {
       imageSmoothingEnabled: false,
       softShadowsEnabled: true,
       softShadowsAmount: 2.5,
-      shaderEnabled: true,
     });
 
     // GUI controls
@@ -119,10 +112,10 @@ export class LightingScene extends Scene {
       })
       .listen();
     Game.gui
-      .add(this.lightingSystem.options, 'shaderEnabled')
-      .name('Shader enabled')
+      .add(this.lightingSystem.options, 'surfaceMapsEnabled')
+      .name('Surface maps enabled')
       .onChange(value => {
-        this.lightingSystem.options.shaderEnabled = value;
+        this.lightingSystem.options.surfaceMapsEnabled = value;
       })
       .listen();
     Game.gui
@@ -216,24 +209,10 @@ export class LightingScene extends Scene {
       })
       .listen();
     Game.gui
-      .add(this.lightingSystem.options, 'spriteWallShadowLengthFactor', 0, 1)
-      .name('Sprite wall shadow length factor')
+      .add(this.lightingSystem.options, 'wallShadowLengthFactor', 0.1, 2)
+      .name('Wall shadow length factor')
       .onChange(value => {
-        this.lightingSystem.options.spriteWallShadowLengthFactor = value;
-      })
-      .listen();
-    Game.gui
-      .add(this.lightingSystem.options, 'spriteWallShadowInterceptOffset', 0, 1)
-      .name('Sprite wall shadow intercept offset')
-      .onChange(value => {
-        this.lightingSystem.options.spriteWallShadowInterceptOffset = value;
-      })
-      .listen();
-    Game.gui
-      .add(this.lightingSystem.options, 'circleWallShadowLengthFactor', 0, 1)
-      .name('Circle wall shadow length factor')
-      .onChange(value => {
-        this.lightingSystem.options.circleWallShadowLengthFactor = value;
+        this.lightingSystem.options.wallShadowLengthFactor = value;
       })
       .listen();
   }
@@ -350,7 +329,8 @@ export class LightingScene extends Scene {
       state.options.softShadowsEnabled;
     this.lightingSystem.options.softShadowsAmount =
       state.options.softShadowsAmount;
-    this.lightingSystem.options.shaderEnabled = state.options.shaderEnabled;
+    this.lightingSystem.options.surfaceMapsEnabled =
+      state.options.surfaceMapsEnabled ?? state.options.shaderEnabled;
     this.lightingSystem.options.ambientLightColour =
       state.options.ambientLightColour;
     this.lightingSystem.options.ambientLightShadowColour =
@@ -363,12 +343,9 @@ export class LightingScene extends Scene {
       state.options.wallLightingYOffset;
     this.lightingSystem.options.wallLightingCutoffDistance =
       state.options.wallLightingCutoffDistance;
-    this.lightingSystem.options.spriteWallShadowLengthFactor =
+    this.lightingSystem.options.wallShadowLengthFactor =
+      state.options.wallShadowLengthFactor ??
       state.options.spriteWallShadowLengthFactor;
-    this.lightingSystem.options.spriteWallShadowInterceptOffset =
-      state.options.spriteWallShadowInterceptOffset;
-    this.lightingSystem.options.circleWallShadowLengthFactor =
-      state.options.circleWallShadowLengthFactor;
 
     this.groundShadowReceivers.forEach(g => g.destroy());
     this.groundShadowReceivers = state.groundShadowReceivers.map((g: any) =>
@@ -726,8 +703,7 @@ export class LightingScene extends Scene {
    */
   private drawSelectedLight(
     context: CanvasRenderingContext2D,
-    getCanvas: (light: LightActor) => HTMLCanvasElement,
-    yOffset: number
+    getCanvas: (light: LightActor) => HTMLCanvasElement
   ) {
     if (!this.selected || this.selected.type !== 'Light') {
       return;
@@ -740,14 +716,13 @@ export class LightingScene extends Scene {
     context.drawImage(
       getCanvas(this.selected),
       this.selected.position.x - this.selected.radius,
-      this.selected.position.y - this.selected.radius + yOffset
+      this.selected.position.y - this.selected.radius
     );
     context.restore();
   }
 
   public draw(context: CanvasRenderingContext2D) {
     const lighting = this.lightingSystem;
-    const { wallLightingYOffset } = lighting.options;
 
     context.imageSmoothingEnabled = false;
 
@@ -763,59 +738,25 @@ export class LightingScene extends Scene {
         lighting.render(context, this.camera);
         break;
 
-      case LightingSceneRenderMode.GroundMask:
-        this.drawPrepared(context, () => lighting.groundMaskCanvas);
-        break;
-
-      case LightingSceneRenderMode.WallMask1:
-        this.drawPrepared(context, () => lighting.wallMask1Canvas);
-        break;
-
-      case LightingSceneRenderMode.WallMask2:
-        this.drawPrepared(context, () => lighting.wallMask2Canvas);
-        break;
-
-      case LightingSceneRenderMode.GroundMaskedLightMap:
-        this.drawPrepared(context, () => lighting.groundMaskedLightMapCanvas);
-        break;
-
-      case LightingSceneRenderMode.WallMaskedLightMap1:
-        this.drawPrepared(context, () => lighting.wallMaskedLightMap1Canvas);
-        break;
-
-      case LightingSceneRenderMode.WallMaskedLightMap2:
-        this.drawPrepared(context, () => lighting.wallMaskedLightMap2Canvas);
+      case LightingSceneRenderMode.SurfaceMap:
+        this.drawPrepared(context, () => lighting.getSurfaceMapCanvas());
         break;
 
       case LightingSceneRenderMode.SelectedLightMap:
+        this.drawSelectedLight(context, light => light.object.lightCanvas);
+        break;
+
+      case LightingSceneRenderMode.SelectedRegionShadowMap:
         this.drawSelectedLight(
           context,
-          light => light.object.lightCanvas,
-          wallLightingYOffset
+          light => light.object.regionShadowCanvas
         );
         break;
 
-      case LightingSceneRenderMode.SelectedGroundLightMap:
+      case LightingSceneRenderMode.SelectedObjectShadowMap:
         this.drawSelectedLight(
           context,
-          light => light.object.groundLightCanvas,
-          0
-        );
-        break;
-
-      case LightingSceneRenderMode.SelectedWall1LightMap:
-        this.drawSelectedLight(
-          context,
-          light => light.object.wallLight1Canvas,
-          wallLightingYOffset
-        );
-        break;
-
-      case LightingSceneRenderMode.SelectedWall2LightMap:
-        this.drawSelectedLight(
-          context,
-          light => light.object.wallLight2Canvas,
-          wallLightingYOffset
+          light => light.object.objectShadowCanvas
         );
         break;
 

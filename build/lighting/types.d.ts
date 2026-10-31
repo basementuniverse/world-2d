@@ -59,7 +59,3 @@ export declare enum Side {
     Bottom = "bottom",
     Left = "left"
 }
-export declare enum WallShadowLayer {
-    One = "one",
-    Two = "two"
-}
