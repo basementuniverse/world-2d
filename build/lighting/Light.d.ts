@@ -1,12 +1,12 @@
-import { vec } from '@basementuniverse/vec';
+import { vec2 } from '@basementuniverse/vec';
+import { Colour, Rectangle } from '../core';
 import { CircleCaster, RegionCaster, SpriteCaster } from './Caster';
 import type { LightingSystem } from './LightingSystem';
-import { Colour, Rectangle } from './types';
 export type LightOptions = {
     /**
      * World position of this light
      */
-    position: vec;
+    position: vec2;
     /**
      * Radius of this light in world units
      */
@@ -43,7 +43,7 @@ export declare class Light {
     private static readonly DEFAULT_HEIGHT;
     private static readonly SHADOW_BUFFER;
     private lightingSystem;
-    position: vec;
+    position: vec2;
     private _radius;
     private _colour;
     colourObject: Colour;
@@ -82,7 +82,7 @@ export declare class Light {
     /**
      * Move this light to a new world position
      */
-    moveTo(position: vec): void;
+    moveTo(position: vec2): void;
     /**
      * Change some of the options for this light
      */

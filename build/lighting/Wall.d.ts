@@ -1,8 +1,8 @@
-import { vec } from '@basementuniverse/vec';
+import { vec2 } from '@basementuniverse/vec';
+import { Rectangle, SceneImage } from '../core';
 import { RegionCaster } from './Caster';
 import type { LightingSystem } from './LightingSystem';
 import { WallReceiver, WallReceiverOptions } from './Surface';
-import { LightingImage, Rectangle } from './types';
 export type WallOptions = Omit<WallReceiverOptions, 'position' | 'size' | 'receiveLight'> & {
     /**
      * The area of the ground that this wall stands on
@@ -21,7 +21,7 @@ export type WallOptions = Omit<WallReceiverOptions, 'position' | 'size' | 'recei
      */
     top?: {
         colour?: string;
-        image?: LightingImage | null;
+        image?: SceneImage | null;
     };
 };
 /**
@@ -42,7 +42,7 @@ export declare class Wall {
     /**
      * Move this wall so that its footprint is at a new world position
      */
-    moveTo(position: vec): void;
+    moveTo(position: vec2): void;
     /**
      * Remove this wall from the lighting system
      */

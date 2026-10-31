@@ -40,10 +40,16 @@ npm run start
 
 ## Project structure
 
-* `src/lighting` is the library, it builds to `build/index.js` and doesn't depend on the demo
+* `src/core` is the code that's shared by every rendering system: types, geometry, and a `GlContext` that wraps a WebGL context
+* `src/lighting` is the lighting system, it only depends on `src/core`
+* `src/reflections` is the reflection system, it only depends on `src/core`
+* `src/world` is a `World`, which renders a scene using several systems working together
+* `build/index.js` is the library, it contains all of the above and doesn't depend on the demo
 * `src/demo` is the editor shown in the preview, it builds to `build/game.js` and is a good example of how to use the library
 
 Run `npm run build` to build both.
+
+The demo has a second scene showing reflections, open `index.html?scene=reflections` and use the arrow keys or WASD to move around.
 
 ## How to integrate it into your game
 
@@ -65,14 +71,14 @@ Then we add things to the scene. Each of the `add...()` methods returns an objec
 
 ```ts
 lighting.addGround({
-  position: vec(0, 0),
-  size: vec(800, 600),
+  position: vec2(0, 0),
+  size: vec2(800, 600),
   image: groundImage,
 });
 
 // Creates a lit front face, an unlit top, and a footprint that casts shadows
 lighting.addWall({
-  footprint: { position: vec(100, 100), size: vec(48, 48) },
+  footprint: { position: vec2(100, 100), size: vec2(48, 48) },
   height: 48,
   image: wallImage,
   top: { image: wallTopImage },
@@ -80,13 +86,13 @@ lighting.addWall({
 
 // Creates a surface that receives light, and a shadow based on the image
 const hero = lighting.addActor({
-  position: vec(200, 200),
-  size: vec(32, 48),
+  position: vec2(200, 200),
+  size: vec2(32, 48),
   image: heroImage,
 });
 
 const torch = lighting.addLight({
-  position: vec(250, 250),
+  position: vec2(250, 250),
   radius: 200,
   colour: 'white',
 });
@@ -111,21 +117,180 @@ lighting.render(context, camera, context => {
 });
 ```
 
+### Using a World
+
+A `World` renders a scene using all of the systems that you give it. Each system draws its part of the frame without needing to know about the others, and the `World` decides the order.
+
+```ts
+import { LightingSystem, ReflectionSystem, World } from 'lighting-2d';
+
+const world = new World({
+  lighting: new LightingSystem({ ambientLightColour: '#555' }),
+  reflections: new ReflectionSystem(),
+});
+
+world.addGround({ position: vec2(0, 0), size: vec2(800, 600), image: groundImage });
+world.addLight({ position: vec2(250, 250), radius: 200 });
+const hero = world.addActor({ sprite: heroSprite });
+
+world.render(context, camera);
+```
+
+`world.lighting` is the `LightingSystem`, if you need one of its other methods.
+
+If you don't pass in a `LightingSystem` then the scene is drawn without any lighting and WebGL isn't used. You can do the same thing with the `lightingEnabled` option on a `LightingSystem`, which can also be changed at any time.
+
+### Reflections
+
+Things that appear in reflections are reflection sources, and the floors and walls that show them are reflection receivers.
+
+```ts
+// A source
+const hero = world.addActor({
+  sprite: heroSprite,
+  reflectionSource: true,
+});
+
+// A reflective floor
+world.addGround({
+  position: vec2(0, 0),
+  size: vec2(800, 600),
+  image: floorImage,
+  reflectionReceiver: { strength: 0.5 },
+});
+
+// A wall where the whole front is a mirror
+world.addWall({
+  footprint: { position: vec2(100, 100), size: vec2(128, 16) },
+  height: 64,
+  image: mirrorImage,
+  reflectionReceiver: true,
+});
+```
+
+To make part of a floor or wall reflective, pass a `position` and `size`, and optionally a `mask` image whose alpha channel decides which parts are reflective. These can be used several times for the same object:
+
+```ts
+const wall = world.addWall({ /* ... */ });
+
+world.addMirror(wall.front, {
+  position: vec2(120, 60),
+  size: vec2(40, 40),
+  mask: roundMaskImage,
+});
+
+world.addFloorReflection(ground, {
+  position: vec2(200, 200),
+  size: vec2(64, 64),
+  strength: 0.8,
+});
+```
+
+`world.addMirror()` and `world.addFloorReflection()` return an object that can be used to change the `strength` or `remove()` the reflection. Reflections are removed along with the object that they belong to. Mirrors and reflective floors are placed once, so they won't follow a wall or an area of ground that's moved.
+
+If a `World` doesn't have a `ReflectionSystem` then these options are ignored, so you can turn off reflections by not passing one in.
+
+#### Reflection sources
+
+Use an object for `reflectionSource` to change how something is reflected:
+
+* `footOffset: number` how far the object's feet are above the bottom of its image, set this if the image has empty space underneath the object
+* `floor: boolean` should this appear in floors?
+* `wall: boolean` should this appear in walls? This is false by default for walls
+* `wallDirections: Record<string, string>` which way a sprite appears to be facing in a wall
+* `wallImage: image` for actors that aren't sprites, an image of the object's other side to show in walls
+
+#### How reflections work
+
+A top-down 3/4 view draws a point at height `z` at `screenY = y - z`. This tells us what each kind of reflection looks like:
+
+* **Floors** make `z` negative, so a source is flipped upside-down around its own feet. This is why it doesn't matter where the source is, and why each source needs to know where its feet are.
+* **Walls** move a source to the other side of the wall, so `y` becomes `2 * wallFoot - y`. The source stays the same way up, but moves up the screen by twice its distance from the wall.
+
+In a wall we're looking at the side of the source that faces the wall. A character facing north will appear to face south, so a sprite's image comes from `sprite.getImage()` using the opposite direction. By default this swaps `north` and `south`, and `up` and `down`, and any other direction stays the same. If your sprites have other directions, for example diagonals, then set `wallDirections`:
+
+```ts
+reflectionSource: {
+  wallDirections: {
+    north: 'south',
+    south: 'north',
+    'north-east': 'south-east',
+    'south-east': 'north-east',
+    'north-west': 'south-west',
+    'south-west': 'north-west',
+  },
+}
+```
+
+Reflections are drawn into the scene before lighting is applied, so a reflection is lit by the light on the floor or wall that it appears in. Floor reflections are drawn after the ground and before anything that stands on the ground. Wall reflections are drawn straight after their wall, so anything in front of the wall will cover them.
+
+There are some limits to this:
+
+* Mirrors only show sources, they don't show the floor or the room.
+* Nothing blocks a reflection, so a source can appear in a mirror even if there's something between it and the mirror (unless that's drawn in front of the mirror).
+* If a sprite has to be drawn facing a different direction in a wall, then its `preRender` and `postRender` hooks won't be used for the reflection.
+
+If you aren't using a `World`, see `src/reflections/ReflectionSystem.ts` for the steps.
+
+### Animated actors
+
+An actor can follow a [@basementuniverse/sprite](https://www.npmjs.com/package/@basementuniverse/sprite), which handles directions and animations:
+
+```ts
+const hero = lighting.addActor({ sprite: heroSprite });
+```
+
+Update the sprite as usual, there's no need to update the actor as well. Every time the scene is rendered, the actor copies the sprite's position, size, and current frame, so its lighting and shadow match the frame being drawn.
+
+```ts
+heroSprite.position = player.position;
+heroSprite.direction = 'left';
+heroSprite.update(dt);
+
+lighting.render(context, camera);
+```
+
+For normal maps and specular maps, add `normal` and `specular` layers to the sprite's animations. These should have one image for each frame:
+
+```ts
+const heroSprite = new Sprite({
+  directions: ['left', 'right'],
+  defaultDirection: 'left',
+  defaultAnimation: 'walk',
+  animations: {
+    walk: {
+      left: {
+        name: 'walk',
+        frameCount: 2,
+        images: [walkLeft1, walkLeft2],
+        layers: {
+          normal: [walkLeftNormal1, walkLeftNormal2],
+          specular: [walkLeftSpecular1, walkLeftSpecular2],
+        },
+      },
+      // ...
+    },
+  },
+});
+```
+
+The sprite's `rotation` isn't supported by the lighting: the image will be rotated, but the area that receives light won't be.
+
 ### Normal maps and specular maps
 
 Add a `normalMap` and `specularMap` image to anything that needs one.
 
 ```ts
 lighting.addGround({
-  position: vec(0, 0),
-  size: vec(800, 600),
+  position: vec2(0, 0),
+  size: vec2(800, 600),
   image: floorImage,
   normalMap: floorNormalImage,
   specularMap: floorSpecularImage,
 });
 
 lighting.addLight({
-  position: vec(250, 250),
+  position: vec2(250, 250),
   radius: 200,
   height: 48,
 });
@@ -143,9 +308,11 @@ A surface's shape comes from its image's alpha channel, and an actor's shadow is
 
 Lighting is rendered using WebGL. If it isn't available then a warning is logged and the scene is drawn without any lighting.
 
+The `LightingSystem` creates its own WebGL context, or you can pass a `GlContext` as the second argument to share one with other rendering systems.
+
 ### Changing and removing things
 
-Everything that's returned from an `add...()` method has `moveTo()` and `remove()`. Surfaces and casters also have `resize()` and `set()`, for example `surface.set({ colour: 'red' })`.
+Everything that's returned from an `add...()` method has `moveTo()` and `remove()`. Calling `moveTo()` on an actor that follows a sprite will set the sprite's position. Surfaces and casters also have `resize()` and `set()`, for example `surface.set({ colour: 'red' })`.
 
 An `Actor` or `Wall` is made from several smaller objects, which are available as `actor.surface` and `actor.caster`, or `wall.front`, `wall.top`, and `wall.caster`.
 
@@ -167,8 +334,8 @@ If something isn't a single image, you can replace any of the drawing steps for 
 
 ```ts
 lighting.addWallReceiver({
-  position: vec(100, 100),
-  size: vec(32, 32),
+  position: vec2(100, 100),
+  size: vec2(32, 32),
   customDraw: {
     image: context => drawMyObject(context),
     normalMap: context => drawMyObjectNormals(context),
@@ -178,9 +345,9 @@ lighting.addWallReceiver({
 
 ## How it works
 
-> Note: the `vec` type is from [@basementuniverse/vec](https://www.npmjs.com/package/@basementuniverse/vec) and looks like:
+> Note: the `vec2` type is from [@basementuniverse/vec](https://www.npmjs.com/package/@basementuniverse/vec) and looks like:
 > ```ts
-> type vec = {
+> type vec2 = {
 >   x: number;
 >   y: number;
 > }
@@ -194,8 +361,8 @@ Shadow casters can be one of:
 
 This is a rectangle that casts polygonal shadows.
 
-* `position: vec` the position of the shadow caster
-* `size: vec` the size of the shadow caster (axis-aligned rectangle)
+* `position: vec2` the position of the shadow caster
+* `size: vec2` the size of the shadow caster (axis-aligned rectangle)
 * `includeRegionShadow: boolean` when casting shadows, should we include the rectangular region of the shadow caster?
 
 e.g.
@@ -214,12 +381,12 @@ This is a rectangle with an image. The image will be rotated and stretched when 
 
 <img src="docs/sprite-shadow-caster.png" width="20%" border="1" />
 
-* `position: vec` the position of the shadow caster
-* `size: vec` the size of the shadow caster (axis-aligned rectangle), this will be used as the size of the sprite
+* `position: vec2` the position of the shadow caster
+* `size: vec2` the size of the shadow caster (axis-aligned rectangle), this will be used as the size of the sprite
 * `shadow: image` the image used for casting shadows
 * `image: image` if `shadow` isn't set, the silhouette of this image will be used instead
-* `anchor: vec` the anchor point of the sprite where (0, 0) is the top-left corner, (0.5, 0.5) is the center, (1, 1) is the bottom-right corner
-* `offset: vec` used to offset the sprite from the anchor position
+* `anchor: vec2` the anchor point of the sprite where (0, 0) is the top-left corner, (0.5, 0.5) is the center, (1, 1) is the bottom-right corner
+* `offset: vec2` used to offset the sprite from the anchor position
 * `minShadowLength: number` the minimum length of the shadow
 * `maxShadowLength: number` the maximum length of the shadow
 
@@ -231,9 +398,9 @@ This is a rectangle which casts an elliptical shadow.
 
 <img src="docs/circle-shadow-caster.png" width="40%" border="1" />
 
-* `position: vec` the position of the shadow caster
-* `size: vec` the size of the shadow caster (axis-aligned rectangle), this will be used as the size of the ellipse
-* `anchor: vec` the anchor point of the circle where (0, 0) is the top-left corner, (0.5, 0.5) is the center, (1, 1) is the bottom-right corner
+* `position: vec2` the position of the shadow caster
+* `size: vec2` the size of the shadow caster (axis-aligned rectangle), this will be used as the size of the ellipse
+* `anchor: vec2` the anchor point of the circle where (0, 0) is the top-left corner, (0.5, 0.5) is the center, (1, 1) is the bottom-right corner
 * `minShadowDistance: number` the minimum distance between the anchor position and center of the shadow ellipse
 * `maxShadowDistance: number` the maximum distance between the anchor position and center of the shadow ellipse
 * `alpha: number` the opacity of the shadow
@@ -250,8 +417,8 @@ This is a rectangle that receives ground shadows.
 
 <img src="docs/ground-shadow-receiver.png" width="40%" border="1" />
 
-* `position: vec` the position of the shadow receiver
-* `size: vec` the size of the shadow receiver (axis-aligned rectangle)
+* `position: vec2` the position of the shadow receiver
+* `size: vec2` the size of the shadow receiver (axis-aligned rectangle)
 * `colour: string` an optional background colour for the shadow receiver
 * `image: image` the image used for rendering this shadow receiver (the image will be repeated)
 * `normalMap: image` an optional normal map (the image will be repeated)
@@ -269,7 +436,7 @@ As well as the options above:
 * `receiveLight: boolean` true if this shadow receiver should receive light and shadows (useful for tops of walls which should only receive ambient light)
 * `mask: image` an image whose alpha channel decides which parts of the shadow receiver are lit, if this isn't set then `image` is used
 * `repeat: boolean` true if the images should be repeated, false if the images should be stretched
-* `surfaceNormal: vec` the direction that this surface is facing, used for ambient lighting
+* `surfaceNormal: vec2` the direction that this surface is facing, used for ambient lighting
 * `shadowBias: number` how far towards the light to look for shadows on the ground, this should be enough to get out of the receiver's own shadow
 * `projectShadows: boolean` true if sprite and circle shadows should climb this receiver, this should be false for anything that casts one of these shadows
 

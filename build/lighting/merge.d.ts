@@ -1,4 +1,4 @@
-import { Rectangle } from './types';
+import { Rectangle } from '../core';
 type Mergeable<T> = Rectangle & {
     canMerge(other: T): boolean;
     merge(other: T): T;

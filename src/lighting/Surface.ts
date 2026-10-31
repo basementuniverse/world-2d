@@ -1,8 +1,7 @@
-import { vec } from '@basementuniverse/vec';
+import { vec2 } from '@basementuniverse/vec';
+import { boundingRectangle, drawImageInRectangle, SceneImage } from '../core';
 import type { LightingSystem } from './LightingSystem';
 import { SceneObject, SceneObjectOptions } from './SceneObject';
-import { LightingImage } from './types';
-import { boundingRectangle, drawImageInRectangle } from './utilities';
 
 type DrawCallback = (context: CanvasRenderingContext2D) => void;
 
@@ -15,17 +14,17 @@ export type SurfaceOptions = SceneObjectOptions & {
   /**
    * The image for this surface
    */
-  image?: LightingImage | null;
+  image?: SceneImage | null;
 
   /**
    * Optional normal map, used when the shader is enabled
    */
-  normalMap?: LightingImage | null;
+  normalMap?: SceneImage | null;
 
   /**
    * Optional specular map, used when the shader is enabled
    */
-  specularMap?: LightingImage | null;
+  specularMap?: SceneImage | null;
 
   /**
    * Surfaces are drawn in order of z-index and then by their bottom edge
@@ -54,11 +53,13 @@ export abstract class Surface<
   private static readonly SPECULAR_MAP_DEFAULT_COLOUR = 'black';
 
   public colour: string = '';
-  public image: LightingImage | null = null;
-  public normalMap: LightingImage | null = null;
-  public specularMap: LightingImage | null = null;
+  public image: SceneImage | null = null;
+  public normalMap: SceneImage | null = null;
+  public specularMap: SceneImage | null = null;
   public zIndex: number = 0;
   public customDraw: NonNullable<SurfaceOptions['customDraw']> = {};
+
+  protected overlays: DrawCallback[] = [];
 
   private customMaskContext: CanvasRenderingContext2D | null = null;
 
@@ -74,7 +75,7 @@ export abstract class Surface<
    * Returns 'solid' if the whole surface receives lighting, or null if nothing
    * does (for example if the image hasn't loaded yet)
    */
-  public abstract getMask(): LightingImage | 'solid' | null;
+  public abstract getMask(): SceneImage | 'solid' | null;
 
   private fillBackground(context: CanvasRenderingContext2D, colour: string) {
     context.fillStyle = colour;
@@ -86,11 +87,34 @@ export abstract class Surface<
     );
   }
 
-  protected drawImage(context: CanvasRenderingContext2D, image: LightingImage) {
+  protected drawImage(context: CanvasRenderingContext2D, image: SceneImage) {
     drawImageInRectangle(context, image, this, this.repeat);
   }
 
+  /**
+   * Add something to be drawn on top of this surface, it's drawn straight after
+   * the surface so that anything in front of the surface will cover it
+   *
+   * Returns a function which removes the overlay. Overlays don't change the
+   * shape of the surface, and surfaces with overlays can't be merged
+   */
+  public addOverlay(draw: DrawCallback): () => void {
+    this.overlays.push(draw);
+
+    return () => {
+      this.overlays = this.overlays.filter(overlay => overlay !== draw);
+    };
+  }
+
   public draw(context: CanvasRenderingContext2D) {
+    this.drawContent(context);
+    this.overlays.forEach(overlay => overlay(context));
+  }
+
+  /**
+   * Draw this surface without its overlays
+   */
+  public drawContent(context: CanvasRenderingContext2D) {
     if (this.customDraw.image) {
       this.customDraw.image(context);
       return;
@@ -111,7 +135,7 @@ export abstract class Surface<
 
   protected drawColourMap(
     context: CanvasRenderingContext2D,
-    image: LightingImage | null,
+    image: SceneImage | null,
     defaultColour: string
   ) {
     context.save();
@@ -184,7 +208,7 @@ export class GroundReceiver extends Surface<GroundReceiverOptions> {
     this.set(options);
   }
 
-  public getMask(): LightingImage | 'solid' | null {
+  public getMask(): SceneImage | 'solid' | null {
     if (this.customDraw.mask) {
       return this.renderCustomMask(this.customDraw.mask);
     }
@@ -198,7 +222,7 @@ export type WallReceiverOptions = SurfaceOptions & {
    * Image whose alpha channel decides which parts of this surface receive
    * lighting, the default is the alpha channel of `image`
    */
-  mask?: LightingImage | null;
+  mask?: SceneImage | null;
 
   /**
    * Should the image be repeated across the surface? Otherwise it will be
@@ -215,7 +239,7 @@ export type WallReceiverOptions = SurfaceOptions & {
   /**
    * Direction that this surface is facing, for ambient lighting
    */
-  surfaceNormal?: vec;
+  surfaceNormal?: vec2;
 
   /**
    * How far towards the light to look for shadows on the ground, in world
@@ -235,10 +259,10 @@ export type WallReceiverOptions = SurfaceOptions & {
  * A rectangle or sprite that receives wall shadows
  */
 export class WallReceiver extends Surface<WallReceiverOptions> {
-  public mask: LightingImage | null = null;
+  public mask: SceneImage | null = null;
   public repeat = false;
   public receiveLight: boolean = true;
-  public surfaceNormal: vec = vec();
+  public surfaceNormal: vec2 = vec2();
   public shadowBias: number = 1;
   public projectShadows: boolean = true;
 
@@ -247,7 +271,7 @@ export class WallReceiver extends Surface<WallReceiverOptions> {
     this.set(options);
   }
 
-  public getMask(): LightingImage | 'solid' | null {
+  public getMask(): SceneImage | 'solid' | null {
     if (this.customDraw.mask) {
       return this.renderCustomMask(this.customDraw.mask);
     }
@@ -272,6 +296,8 @@ export class WallReceiver extends Surface<WallReceiverOptions> {
     return (
       this.mergeable &&
       other.mergeable &&
+      this.overlays.length === 0 &&
+      other.overlays.length === 0 &&
       // Non-repeating images would stretch across the merged surface
       (this.repeat || !hasImages) &&
       this.zIndex === other.zIndex &&
@@ -282,7 +308,7 @@ export class WallReceiver extends Surface<WallReceiverOptions> {
       this.specularMap === other.specularMap &&
       this.repeat === other.repeat &&
       this.receiveLight === other.receiveLight &&
-      vec.eq(this.surfaceNormal, other.surfaceNormal) &&
+      vec2.eq(this.surfaceNormal, other.surfaceNormal) &&
       this.shadowBias === other.shadowBias &&
       this.projectShadows === other.projectShadows
     );

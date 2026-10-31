@@ -9,6 +9,10 @@
     "outDir": "./build/"
   },
   "include": [
-    "src/lighting/**/*"
+    "src/index.ts",
+    "src/core/**/*",
+    "src/lighting/**/*",
+    "src/reflections/**/*",
+    "src/world/**/*"
   ]
 }

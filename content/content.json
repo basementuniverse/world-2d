@@ -25,6 +25,11 @@
     "args": ["./content/images/character.png"]
   },
   {
+    "name": "character-spritesheet",
+    "type": "image",
+    "args": ["./content/images/character-spritesheet.png"]
+  },
+  {
     "name": "character-mask",
     "type": "image",
     "args": ["./content/images/character-mask.png"]

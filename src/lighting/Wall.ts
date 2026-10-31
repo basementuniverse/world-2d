@@ -1,8 +1,8 @@
-import { vec } from '@basementuniverse/vec';
+import { vec2 } from '@basementuniverse/vec';
+import { Rectangle, SceneImage } from '../core';
 import { RegionCaster } from './Caster';
 import type { LightingSystem } from './LightingSystem';
 import { WallReceiver, WallReceiverOptions } from './Surface';
-import { LightingImage, Rectangle } from './types';
 
 export type WallOptions = Omit<
   WallReceiverOptions,
@@ -28,7 +28,7 @@ export type WallOptions = Omit<
    */
   top?: {
     colour?: string;
-    image?: LightingImage | null;
+    image?: SceneImage | null;
   };
 };
 
@@ -74,14 +74,14 @@ export class Wall {
     const bottom = footprint.position.y + footprint.size.y;
 
     return {
-      position: vec(footprint.position.x, bottom - this.height),
-      size: vec(footprint.size.x, this.height),
+      position: vec2(footprint.position.x, bottom - this.height),
+      size: vec2(footprint.size.x, this.height),
     };
   }
 
   private topRectangle(footprint: Rectangle): Rectangle {
     return {
-      position: vec(footprint.position.x, footprint.position.y - this.height),
+      position: vec2(footprint.position.x, footprint.position.y - this.height),
       size: footprint.size,
     };
   }
@@ -89,7 +89,7 @@ export class Wall {
   /**
    * Move this wall so that its footprint is at a new world position
    */
-  public moveTo(position: vec) {
+  public moveTo(position: vec2) {
     const footprint = { position, size: this.caster.size };
 
     this.caster.moveTo(position);

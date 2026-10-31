@@ -3,6 +3,7 @@
     "module": "CommonJS",
     "moduleResolution": "Node",
     "resolveJsonModule": true,
+    "esModuleInterop": true,
     "target": "es2019",
     "lib": [
       "es2018",

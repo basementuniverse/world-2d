@@ -1,11 +1,16 @@
-import { vec } from '@basementuniverse/vec';
+import { vec2 } from '@basementuniverse/vec';
+import {
+  Colour,
+  GlContext,
+  GlProgram,
+  GlRenderTarget,
+  SceneCamera,
+  SceneImage,
+} from '../core';
 import type { Light } from './Light';
 import { GroundReceiver, Surface, WallReceiver } from './Surface';
-import { Colour, LightingCamera, LightingImage } from './types';
-import copyShader = require('./shaders/copy.frag.glsl');
 import diffuseShader = require('./shaders/diffuse.frag.glsl');
 import maskShader = require('./shaders/mask.frag.glsl');
-import quadShader = require('./shaders/quad.vert.glsl');
 import specularShader = require('./shaders/specular.frag.glsl');
 import surfaceShader = require('./shaders/surface.glsl');
 
@@ -21,12 +26,12 @@ export type ShaderSurface = {
  * Everything that the shaders need for rendering a frame
  */
 export type ShaderScene = {
-  camera: LightingCamera;
-  screen: vec;
+  camera: SceneCamera;
+  screen: vec2;
   lights: Light[];
   surfaces: ShaderSurface[];
-  normalMap: LightingImage | null;
-  specularMap: LightingImage | null;
+  normalMap: SceneImage | null;
+  specularMap: SceneImage | null;
   imageSmoothingEnabled: boolean;
   wallLightingYOffset: number;
   wallLightingCutoffDistance: number;
@@ -39,16 +44,6 @@ export type ShaderScene = {
   banding: number;
 };
 
-type Program = {
-  program: WebGLProgram;
-  uniforms: Record<string, WebGLUniformLocation>;
-};
-
-type RenderTarget = {
-  texture: WebGLTexture;
-  framebuffer: WebGLFramebuffer;
-};
-
 enum TextureUnit {
   NormalMap,
   SpecularMap,
@@ -56,7 +51,6 @@ enum TextureUnit {
   LightMap,
   RegionShadowMap,
   ObjectShadowMap,
-  Image,
 }
 
 /**
@@ -72,7 +66,7 @@ enum SurfaceType {
 }
 
 /**
- * Renders the lighting for a scene using a single WebGL context
+ * Renders the lighting for a scene
  *
  * Surfaces are drawn into a surface map without any blending, so each pixel
  * belongs to exactly one surface and knows where that surface meets the ground.
@@ -87,66 +81,51 @@ export class ShaderPass {
   private static readonly FOOT_MAX = 65535;
   private static readonly MAX_SHADOW_BIAS = 255;
 
+  private context: GlContext;
+
+  private initialised = false;
+
+  private maskProgram: GlProgram;
+  private diffuseProgram: GlProgram;
+  private specularProgram: GlProgram;
+
+  private textures: Record<
+    Exclude<TextureUnit, TextureUnit.SurfaceMap>,
+    WebGLTexture
+  >;
+  private surfaceTarget: GlRenderTarget;
+  private specularTarget: GlRenderTarget;
+
+  public constructor(context: GlContext) {
+    this.context = context;
+    this.context.onInitialise(gl => this.initialise(gl));
+  }
+
   /**
    * The output of the most recent pass
    */
-  public readonly canvas = document.createElement('canvas');
-
-  private gl: WebGLRenderingContext | null = null;
-
-  private copyProgram: Program;
-  private maskProgram: Program;
-  private diffuseProgram: Program;
-  private specularProgram: Program;
-
-  private textures: Record<TextureUnit, WebGLTexture>;
-  private surfaceTarget: RenderTarget;
-  private specularTarget: RenderTarget;
-
-  /**
-   * Images only need to be uploaded once, but canvases might change
-   */
-  private imageTextures = new WeakMap<LightingImage, WebGLTexture>();
-  private uploadedCanvases = new Set<LightingImage>();
-
-  public constructor() {
-    this.canvas.addEventListener('webglcontextlost', e => e.preventDefault());
-    this.canvas.addEventListener('webglcontextrestored', () =>
-      this.initialise()
-    );
-
-    this.initialise();
+  public get canvas(): HTMLCanvasElement {
+    return this.context.canvas;
   }
 
   /**
    * Check if the shaders can be used
    */
   public get available(): boolean {
-    return this.gl !== null && !this.gl.isContextLost();
+    return this.initialised && this.context.available;
   }
 
-  private initialise() {
-    this.gl = null;
-
-    const gl = this.canvas.getContext('webgl', {
-      alpha: true,
-      premultipliedAlpha: false,
-      antialias: false,
-      depth: false,
-      stencil: false,
-    });
-    if (!gl) {
-      console.warn('WebGL is not available, lighting has been disabled');
-      return;
-    }
+  private initialise(gl: WebGLRenderingContext) {
+    this.initialised = false;
 
     try {
       const prepend = (source: string) => `${surfaceShader}\n${source}`;
 
-      this.copyProgram = this.createProgram(gl, copyShader);
-      this.maskProgram = this.createProgram(gl, maskShader);
-      this.diffuseProgram = this.createProgram(gl, prepend(diffuseShader));
-      this.specularProgram = this.createProgram(gl, prepend(specularShader));
+      this.maskProgram = this.context.createProgram(maskShader);
+      this.diffuseProgram = this.context.createProgram(prepend(diffuseShader));
+      this.specularProgram = this.context.createProgram(
+        prepend(specularShader)
+      );
     } catch (e) {
       console.error('Lighting has been disabled', e);
       return;
@@ -155,237 +134,34 @@ export class ShaderPass {
     this.textures = {
       [TextureUnit.NormalMap]: gl.createTexture()!,
       [TextureUnit.SpecularMap]: gl.createTexture()!,
-      [TextureUnit.SurfaceMap]: gl.createTexture()!,
       [TextureUnit.LightMap]: gl.createTexture()!,
       [TextureUnit.RegionShadowMap]: gl.createTexture()!,
       [TextureUnit.ObjectShadowMap]: gl.createTexture()!,
-      [TextureUnit.Image]: gl.createTexture()!,
     };
-    this.surfaceTarget = {
-      texture: this.textures[TextureUnit.SurfaceMap],
-      framebuffer: gl.createFramebuffer()!,
-    };
-    this.specularTarget = {
-      texture: gl.createTexture()!,
-      framebuffer: gl.createFramebuffer()!,
-    };
-    this.imageTextures = new WeakMap();
+    this.surfaceTarget = this.context.createRenderTarget();
+    this.specularTarget = this.context.createRenderTarget();
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]),
-      gl.STATIC_DRAW
-    );
-    gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-    gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
-
-    this.gl = gl;
-    this.canvas.width = this.canvas.height = 0;
-  }
-
-  private compileShader(
-    gl: WebGLRenderingContext,
-    type: number,
-    source: string
-  ): WebGLShader {
-    const shader = gl.createShader(type)!;
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-
-    if (
-      !gl.getShaderParameter(shader, gl.COMPILE_STATUS) &&
-      !gl.isContextLost()
-    ) {
-      throw new Error(gl.getShaderInfoLog(shader) ?? 'Unable to compile');
-    }
-
-    return shader;
-  }
-
-  private createProgram(
-    gl: WebGLRenderingContext,
-    fragmentSource: string
-  ): Program {
-    const program = gl.createProgram()!;
-
-    gl.attachShader(
-      program,
-      this.compileShader(gl, gl.VERTEX_SHADER, quadShader)
-    );
-    gl.attachShader(
-      program,
-      this.compileShader(gl, gl.FRAGMENT_SHADER, fragmentSource)
-    );
-    gl.bindAttribLocation(program, 0, 'a_corner');
-    gl.linkProgram(program);
-
-    if (
-      !gl.getProgramParameter(program, gl.LINK_STATUS) &&
-      !gl.isContextLost()
-    ) {
-      throw new Error(gl.getProgramInfoLog(program) ?? 'Unable to link');
-    }
-
-    const uniforms: Program['uniforms'] = {};
-    const count = gl.getProgramParameter(program, gl.ACTIVE_UNIFORMS);
-    for (let i = 0; i < count; i++) {
-      const { name } = gl.getActiveUniform(program, i)!;
-      uniforms[name] = gl.getUniformLocation(program, name)!;
-    }
-
-    return { program, uniforms };
-  }
-
-  /**
-   * Bind a texture and set its filtering
-   */
-  private bindTexture(
-    gl: WebGLRenderingContext,
-    unit: number,
-    texture: WebGLTexture,
-    filter: number
-  ) {
-    gl.activeTexture(gl.TEXTURE0 + unit);
-    gl.bindTexture(gl.TEXTURE_2D, texture);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    this.initialised = true;
   }
 
   /**
    * Upload an image to one of the shared textures
    */
   private upload(
-    gl: WebGLRenderingContext,
-    unit: TextureUnit,
-    image: LightingImage,
+    unit: Exclude<TextureUnit, TextureUnit.SurfaceMap>,
+    image: SceneImage,
     filter: number
   ) {
-    this.bindTexture(gl, unit, this.textures[unit], filter);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
-  }
-
-  /**
-   * Bind a surface's mask, uploading it if we haven't seen it before
-   */
-  private bindImage(
-    gl: WebGLRenderingContext,
-    image: LightingImage,
-    filter: number
-  ) {
-    let texture = this.imageTextures.get(image);
-    const isNew = texture === undefined;
-    if (!texture) {
-      texture = gl.createTexture()!;
-      this.imageTextures.set(image, texture);
-    }
-
-    this.bindTexture(gl, TextureUnit.Image, texture, filter);
-
-    const isStale =
-      image instanceof HTMLCanvasElement && !this.uploadedCanvases.has(image);
-    if (isNew || isStale) {
-      gl.texImage2D(
-        gl.TEXTURE_2D,
-        0,
-        gl.RGBA,
-        gl.RGBA,
-        gl.UNSIGNED_BYTE,
-        image
-      );
-      this.uploadedCanvases.add(image);
-    }
-  }
-
-  /**
-   * Set the size of a texture that we're rendering into
-   */
-  private resizeTarget(
-    gl: WebGLRenderingContext,
-    { texture, framebuffer }: RenderTarget,
-    screen: vec
-  ) {
-    this.bindTexture(gl, TextureUnit.Image, texture, gl.NEAREST);
-    gl.texImage2D(
-      gl.TEXTURE_2D,
-      0,
-      gl.RGBA,
-      screen.x,
-      screen.y,
-      0,
-      gl.RGBA,
-      gl.UNSIGNED_BYTE,
-      null
-    );
-
-    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
-    gl.framebufferTexture2D(
-      gl.FRAMEBUFFER,
-      gl.COLOR_ATTACHMENT0,
-      gl.TEXTURE_2D,
-      texture,
-      0
-    );
+    this.context.upload(unit, this.textures[unit], image, filter);
   }
 
   /**
    * Make sure the output and the render targets match the screen size
    */
-  private resize(gl: WebGLRenderingContext, screen: vec) {
-    if (this.canvas.width === screen.x && this.canvas.height === screen.y) {
-      return;
-    }
-
-    this.canvas.width = screen.x;
-    this.canvas.height = screen.y;
-    gl.viewport(0, 0, screen.x, screen.y);
-
-    this.resizeTarget(gl, this.surfaceTarget, screen);
-    this.resizeTarget(gl, this.specularTarget, screen);
-  }
-
-  /**
-   * Draw a quad covering part of the screen
-   */
-  private drawQuad(
-    gl: WebGLRenderingContext,
-    { uniforms }: Program,
-    screenRectangle: number[],
-    worldRectangle: number[] = [0, 0, 0, 0],
-    maskRectangle: number[] = [0, 0, 0, 0]
-  ) {
-    gl.uniform4fv(uniforms.u_screenRectangle, screenRectangle);
-    gl.uniform4fv(uniforms.u_worldRectangle, worldRectangle);
-    gl.uniform4fv(uniforms.u_maskRectangle, maskRectangle);
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-  }
-
-  /**
-   * Draw a texture over the whole screen, replacing what's already there
-   */
-  private drawTexture(
-    gl: WebGLRenderingContext,
-    texture: WebGLTexture,
-    screen: vec
-  ) {
-    const program = this.copyProgram;
-
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.disable(gl.BLEND);
-    gl.useProgram(program.program);
-    gl.uniform2f(program.uniforms.u_screen, screen.x, screen.y);
-    gl.uniform1f(program.uniforms.u_flipY, 1);
-
-    this.bindTexture(gl, TextureUnit.Image, texture, gl.NEAREST);
-    gl.uniform1i(program.uniforms.u_image, TextureUnit.Image);
-
-    this.drawQuad(gl, program, [0, 0, screen.x, screen.y]);
-
-    // A texture can't stay bound while we're rendering into it
-    gl.bindTexture(gl.TEXTURE_2D, null);
+  private resize(screen: vec2) {
+    this.context.resize(screen);
+    this.context.resizeTarget(this.surfaceTarget, screen);
+    this.context.resizeTarget(this.specularTarget, screen);
   }
 
   /**
@@ -432,7 +208,7 @@ export class ShaderPass {
     const { uniforms } = this.maskProgram;
     const filter = scene.imageSmoothingEnabled ? gl.LINEAR : gl.NEAREST;
 
-    gl.uniform1i(uniforms.u_mask, TextureUnit.Image);
+    gl.uniform1i(uniforms.u_mask, GlContext.IMAGE_UNIT);
 
     for (const item of scene.surfaces) {
       const { surface } = item;
@@ -443,7 +219,7 @@ export class ShaderPass {
 
       let maskRectangle = [0, 0, 1, 1];
       if (mask !== 'solid') {
-        this.bindImage(gl, mask, filter);
+        this.context.bindImage(mask, filter);
 
         // Repeated images are lined up with the world, the same as a pattern
         if (surface.repeat && !surface.customDraw.mask) {
@@ -458,13 +234,12 @@ export class ShaderPass {
 
       const topLeft = scene.camera.worldToScreen(surface.position);
       const bottomRight = scene.camera.worldToScreen(
-        vec.add(surface.position, surface.size)
+        vec2.add(surface.position, surface.size)
       );
 
       gl.uniform1f(uniforms.u_useMask, mask === 'solid' ? 0 : 1);
       gl.uniform4fv(uniforms.u_value, getValue(item));
-      this.drawQuad(
-        gl,
+      this.context.drawQuad(
         this.maskProgram,
         [
           topLeft.x,
@@ -483,7 +258,7 @@ export class ShaderPass {
    */
   private setSceneUniforms(
     gl: WebGLRenderingContext,
-    { program, uniforms }: Program,
+    { program, uniforms }: GlProgram,
     scene: ShaderScene
   ) {
     gl.useProgram(program);
@@ -511,13 +286,13 @@ export class ShaderPass {
    */
   private drawLight(
     gl: WebGLRenderingContext,
-    program: Program,
+    program: GlProgram,
     light: Light,
     scene: ShaderScene
   ) {
     const { position, size } = light.bounds;
     const topLeft = scene.camera.worldToScreen(position);
-    const bottomRight = scene.camera.worldToScreen(vec.add(position, size));
+    const bottomRight = scene.camera.worldToScreen(vec2.add(position, size));
 
     gl.useProgram(program.program);
     gl.uniform1f(program.uniforms.u_lightRadius, light.radius);
@@ -531,8 +306,7 @@ export class ShaderPass {
       scene.camera.bounds.top - light.position.y
     );
 
-    this.drawQuad(
-      gl,
+    this.context.drawQuad(
       program,
       [
         topLeft.x,
@@ -554,16 +328,16 @@ export class ShaderPass {
    * specular highlights if it has a specular map
    */
   public render(scene: ShaderScene) {
-    const { gl } = this;
+    const { gl } = this.context;
     if (!gl) {
       return;
     }
 
-    this.resize(gl, scene.screen);
-    this.uploadedCanvases.clear();
+    this.resize(scene.screen);
+    this.context.invalidateCanvases();
 
     if (scene.normalMap) {
-      this.upload(gl, TextureUnit.NormalMap, scene.normalMap, gl.NEAREST);
+      this.upload(TextureUnit.NormalMap, scene.normalMap, gl.NEAREST);
     }
 
     // Each pixel of the surface map belongs to one surface, so there's no
@@ -594,8 +368,7 @@ export class ShaderPass {
       a,
     ]);
 
-    this.bindTexture(
-      gl,
+    this.context.bindTexture(
       TextureUnit.SurfaceMap,
       this.surfaceTarget.texture,
       gl.NEAREST
@@ -612,7 +385,7 @@ export class ShaderPass {
     );
 
     if (scene.specularMap) {
-      this.upload(gl, TextureUnit.SpecularMap, scene.specularMap, gl.NEAREST);
+      this.upload(TextureUnit.SpecularMap, scene.specularMap, gl.NEAREST);
 
       const { uniforms } = this.specularProgram;
       this.setSceneUniforms(gl, this.specularProgram, scene);
@@ -630,15 +403,13 @@ export class ShaderPass {
 
     gl.enable(gl.BLEND);
     for (const light of scene.lights) {
-      this.upload(gl, TextureUnit.LightMap, light.lightCanvas, filter);
+      this.upload(TextureUnit.LightMap, light.lightCanvas, filter);
       this.upload(
-        gl,
         TextureUnit.RegionShadowMap,
         light.regionShadowCanvas,
         filter
       );
       this.upload(
-        gl,
         TextureUnit.ObjectShadowMap,
         light.objectShadowCanvas,
         filter
@@ -664,9 +435,9 @@ export class ShaderPass {
    * Replace the contents of the canvas with the specular highlights from the
    * most recent render
    */
-  public showSpecular(screen: vec) {
-    if (this.gl) {
-      this.drawTexture(this.gl, this.specularTarget.texture, screen);
+  public showSpecular(screen: vec2) {
+    if (this.context.gl) {
+      this.context.drawTexture(this.specularTarget.texture, screen);
     }
   }
 
@@ -674,9 +445,9 @@ export class ShaderPass {
    * Replace the contents of the canvas with the surface map from the most
    * recent render
    */
-  public showSurfaces(screen: vec) {
-    if (this.gl) {
-      this.drawTexture(this.gl, this.surfaceTarget.texture, screen);
+  public showSurfaces(screen: vec2) {
+    if (this.context.gl) {
+      this.context.drawTexture(this.surfaceTarget.texture, screen);
     }
   }
 }

@@ -1,24 +1,18 @@
 import { parseColor } from '@basementuniverse/parsecolor';
 import { at, smoothstep, unlerp } from '@basementuniverse/utils';
-import { vec } from '@basementuniverse/vec';
-import { CircleCaster, RegionCaster, SpriteCaster } from './Caster';
-import type { LightingSystem } from './LightingSystem';
+import { vec2 } from '@basementuniverse/vec';
 import {
   Colour,
-  Line,
-  PolygonVertices,
-  Rectangle,
-  Sector2d,
-} from './types';
-import {
   colourToString,
-  lineIsFacing,
-  polygon,
+  Rectangle,
   rectanglesIntersect,
   rectangleToInterval,
   rectangleVertices,
-  sector2d,
-} from './utilities';
+} from '../core';
+import { CircleCaster, RegionCaster, SpriteCaster } from './Caster';
+import type { LightingSystem } from './LightingSystem';
+import { Line, PolygonVertices, Sector2d } from './types';
+import { lineIsFacing, polygon, sector2d } from './utilities';
 
 const HALF_PI = Math.PI / 2;
 
@@ -26,7 +20,7 @@ export type LightOptions = {
   /**
    * World position of this light
    */
-  position: vec;
+  position: vec2;
 
   /**
    * Radius of this light in world units
@@ -72,7 +66,7 @@ export class Light {
 
   private lightingSystem: LightingSystem;
 
-  public position: vec;
+  public position: vec2;
   private _radius: number;
   private _colour: string;
   public colourObject: Colour;
@@ -103,7 +97,7 @@ export class Light {
   public constructor(lightingSystem: LightingSystem, options: LightOptions) {
     this.lightingSystem = lightingSystem;
 
-    this.position = vec.cpy(options.position);
+    this.position = vec2.cpy(options.position);
     this._radius = options.radius ?? Light.DEFAULT_RADIUS;
     this._colour = options.colour ?? Light.DEFAULT_COLOUR;
     this._coreRadius = options.coreRadius ?? Light.DEFAULT_CORE_RADIUS;
@@ -130,11 +124,11 @@ export class Light {
     const wallLightingYOffset = this.lightingSystem.options.wallLightingYOffset;
 
     return {
-      position: vec(
+      position: vec2(
         this.position.x - this._radius,
         this.position.y - this._radius + Math.min(wallLightingYOffset, 0)
       ),
-      size: vec(
+      size: vec2(
         this._radius * 2,
         this._radius * 2 + Math.abs(wallLightingYOffset)
       ),
@@ -189,8 +183,8 @@ export class Light {
   /**
    * Move this light to a new world position
    */
-  public moveTo(position: vec) {
-    this.position = vec.cpy(position);
+  public moveTo(position: vec2) {
+    this.position = vec2.cpy(position);
   }
 
   /**
@@ -207,7 +201,7 @@ export class Light {
       castShadows,
     } = options;
 
-    this.position = vec.cpy(position ?? this.position);
+    this.position = vec2.cpy(position ?? this.position);
     this.radius = radius ?? this.radius;
     this.colour = colour ?? this.colour;
     this.coreRadius = coreRadius ?? this.coreRadius;
@@ -357,21 +351,25 @@ export class Light {
           continue;
         }
 
-        const shadowOrigin = vec.add(
+        const shadowOrigin = vec2.add(
           caster.position,
-          vec(caster.size.x * caster.anchor.x, caster.size.y * caster.anchor.y)
+          vec2(caster.size.x * caster.anchor.x, caster.size.y * caster.anchor.y)
         );
         const shadowLength = smoothstep(
           caster.minShadowLength,
           caster.maxShadowLength ?? this.radius,
-          unlerp(0, this.radius, vec.len(vec.sub(shadowOrigin, this.position)))
+          unlerp(
+            0,
+            this.radius,
+            vec2.len(vec2.sub(shadowOrigin, this.position))
+          )
         );
-        const shadowEdge = vec.mul(
-          vec.nor(vec.sub(shadowOrigin, this.position)),
+        const shadowEdge = vec2.mul(
+          vec2.nor(vec2.sub(shadowOrigin, this.position)),
           shadowLength
         );
-        const shadowEdgeLength = vec.len(shadowEdge);
-        const shadowAngle = vec.rad(shadowEdge) + HALF_PI;
+        const shadowEdgeLength = vec2.len(shadowEdge);
+        const shadowAngle = vec2.rad(shadowEdge) + HALF_PI;
 
         context.save();
         context.translate(
@@ -407,20 +405,24 @@ export class Light {
     for (const caster of circleCasters) {
       // Check if this caster is in range of the light
       if (rectanglesIntersect(lightRectangle, caster)) {
-        const shadowOrigin = vec.add(
+        const shadowOrigin = vec2.add(
           caster.position,
-          vec(caster.size.x * caster.anchor.x, caster.size.y * caster.anchor.y)
+          vec2(caster.size.x * caster.anchor.x, caster.size.y * caster.anchor.y)
         );
         const shadowDistance = smoothstep(
           caster.minShadowDistance,
           caster.maxShadowDistance ?? this.radius,
-          unlerp(0, this.radius, vec.len(vec.sub(shadowOrigin, this.position)))
+          unlerp(
+            0,
+            this.radius,
+            vec2.len(vec2.sub(shadowOrigin, this.position))
+          )
         );
-        const shadowPosition = vec.mul(
-          vec.nor(vec.sub(shadowOrigin, this.position)),
+        const shadowPosition = vec2.mul(
+          vec2.nor(vec2.sub(shadowOrigin, this.position)),
           shadowDistance
         );
-        const shadowSize = vec.mul(caster.size, 0.5);
+        const shadowSize = vec2.mul(caster.size, 0.5);
 
         context.save();
         context.globalAlpha = caster.alpha;
@@ -450,7 +452,7 @@ export class Light {
     shadowCasterRectangle: Rectangle,
     includeCasterRegion: boolean = false
   ): PolygonVertices {
-    const lightPosition = vec.cpy(this.position);
+    const lightPosition = vec2.cpy(this.position);
     const lightRadius = this._radius;
     const shadowCasterInterval = rectangleToInterval(shadowCasterRectangle);
     const shadowCasterVertices = rectangleVertices(shadowCasterRectangle);
@@ -461,31 +463,31 @@ export class Light {
       const current = shadowCasterVertices[i];
 
       if (!lineIsFacing({ start: previous, end: current }, this.position)) {
-        const vertex1 = vec.sub(previous, lightPosition);
-        const vertex2 = vec.sub(current, lightPosition);
+        const vertex1 = vec2.sub(previous, lightPosition);
+        const vertex2 = vec2.sub(current, lightPosition);
         shadowEdges.push(
           {
             start: previous,
-            end: vec.add(
+            end: vec2.add(
               previous,
-              vec.mul(
-                vec.nor(vertex1),
+              vec2.mul(
+                vec2.nor(vertex1),
                 Math.max(
                   Light.SHADOW_BUFFER,
-                  lightRadius + Light.SHADOW_BUFFER - vec.len(vertex1)
+                  lightRadius + Light.SHADOW_BUFFER - vec2.len(vertex1)
                 )
               )
             ),
           },
           {
             start: current,
-            end: vec.add(
+            end: vec2.add(
               current,
-              vec.mul(
-                vec.nor(vertex2),
+              vec2.mul(
+                vec2.nor(vertex2),
                 Math.max(
                   Light.SHADOW_BUFFER,
-                  lightRadius + Light.SHADOW_BUFFER - vec.len(vertex2)
+                  lightRadius + Light.SHADOW_BUFFER - vec2.len(vertex2)
                 )
               )
             ),
@@ -506,7 +508,7 @@ export class Light {
             shadowCasterRectangle.position,
             shadowEdges[0].start,
             shadowEdges[0].end,
-            vec(shadowEdges[0].end.x, shadowEdges[3].end.y),
+            vec2(shadowEdges[0].end.x, shadowEdges[3].end.y),
             shadowEdges[3].end,
             shadowEdges[3].start
           );
@@ -514,7 +516,7 @@ export class Light {
           shadowPolygon.push(
             shadowEdges[0].start,
             shadowEdges[0].end,
-            vec(shadowEdges[0].end.x, shadowEdges[3].end.y),
+            vec2(shadowEdges[0].end.x, shadowEdges[3].end.y),
             shadowEdges[3].end,
             shadowEdges[3].start,
             shadowEdges[2].start
@@ -537,8 +539,8 @@ export class Light {
                 lightPosition.x,
                 lightPosition.y,
                 lightRadius + Light.SHADOW_BUFFER,
-                vec.rad(vec.sub(shadowEdges[2].end, shadowEdges[2].start)),
-                vec.rad(vec.sub(shadowEdges[1].end, shadowEdges[1].start)),
+                vec2.rad(vec2.sub(shadowEdges[2].end, shadowEdges[2].start)),
+                vec2.rad(vec2.sub(shadowEdges[1].end, shadowEdges[1].start)),
                 false
               );
             }
@@ -552,8 +554,8 @@ export class Light {
                 lightPosition.x,
                 lightPosition.y,
                 lightRadius + Light.SHADOW_BUFFER,
-                vec.rad(vec.sub(shadowEdges[2].end, shadowEdges[2].start)),
-                vec.rad(vec.sub(shadowEdges[1].end, shadowEdges[1].start)),
+                vec2.rad(vec2.sub(shadowEdges[2].end, shadowEdges[2].start)),
+                vec2.rad(vec2.sub(shadowEdges[1].end, shadowEdges[1].start)),
                 false
               );
             },
@@ -572,20 +574,20 @@ export class Light {
         if (includeCasterRegion) {
           shadowPolygon.push(
             shadowEdges[1].start,
-            vec(
+            vec2(
               shadowCasterRectangle.position.x + shadowCasterRectangle.size.x,
               shadowCasterRectangle.position.y
             ),
             shadowEdges[2].start,
             shadowEdges[2].end,
-            vec(shadowEdges[1].end.x, shadowEdges[2].end.y),
+            vec2(shadowEdges[1].end.x, shadowEdges[2].end.y),
             shadowEdges[1].end
           );
         } else {
           shadowPolygon.push(
             shadowEdges[2].start,
             shadowEdges[2].end,
-            vec(shadowEdges[1].end.x, shadowEdges[2].end.y),
+            vec2(shadowEdges[1].end.x, shadowEdges[2].end.y),
             shadowEdges[1].end,
             shadowEdges[1].start,
             shadowEdges[3].start
@@ -607,8 +609,8 @@ export class Light {
                 lightPosition.x,
                 lightPosition.y,
                 lightRadius + Light.SHADOW_BUFFER,
-                vec.rad(vec.sub(shadowEdges[0].end, shadowEdges[0].start)),
-                vec.rad(vec.sub(shadowEdges[5].end, shadowEdges[5].start)),
+                vec2.rad(vec2.sub(shadowEdges[0].end, shadowEdges[0].start)),
+                vec2.rad(vec2.sub(shadowEdges[5].end, shadowEdges[5].start)),
                 false
               );
             },
@@ -623,8 +625,8 @@ export class Light {
                 lightPosition.x,
                 lightPosition.y,
                 lightRadius + Light.SHADOW_BUFFER,
-                vec.rad(vec.sub(shadowEdges[0].end, shadowEdges[0].start)),
-                vec.rad(vec.sub(shadowEdges[5].end, shadowEdges[5].start)),
+                vec2.rad(vec2.sub(shadowEdges[0].end, shadowEdges[0].start)),
+                vec2.rad(vec2.sub(shadowEdges[5].end, shadowEdges[5].start)),
                 false
               );
             },
@@ -653,8 +655,8 @@ export class Light {
                 lightPosition.x,
                 lightPosition.y,
                 lightRadius + Light.SHADOW_BUFFER,
-                vec.rad(vec.sub(shadowEdges[4].end, shadowEdges[4].start)),
-                vec.rad(vec.sub(shadowEdges[3].end, shadowEdges[3].start)),
+                vec2.rad(vec2.sub(shadowEdges[4].end, shadowEdges[4].start)),
+                vec2.rad(vec2.sub(shadowEdges[3].end, shadowEdges[3].start)),
                 false
               );
             }
@@ -668,8 +670,8 @@ export class Light {
                 lightPosition.x,
                 lightPosition.y,
                 lightRadius + Light.SHADOW_BUFFER,
-                vec.rad(vec.sub(shadowEdges[4].end, shadowEdges[4].start)),
-                vec.rad(vec.sub(shadowEdges[3].end, shadowEdges[3].start)),
+                vec2.rad(vec2.sub(shadowEdges[4].end, shadowEdges[4].start)),
+                vec2.rad(vec2.sub(shadowEdges[3].end, shadowEdges[3].start)),
                 false
               );
             },
@@ -689,10 +691,10 @@ export class Light {
           shadowPolygon.push(
             shadowEdges[0].start,
             shadowEdges[0].end,
-            vec(shadowEdges[3].end.x, shadowEdges[0].end.y),
+            vec2(shadowEdges[3].end.x, shadowEdges[0].end.y),
             shadowEdges[3].end,
             shadowEdges[3].start,
-            vec(
+            vec2(
               shadowCasterRectangle.position.x,
               shadowCasterRectangle.position.y + shadowCasterRectangle.size.y
             )
@@ -701,7 +703,7 @@ export class Light {
           shadowPolygon.push(
             shadowEdges[0].start,
             shadowEdges[0].end,
-            vec(shadowEdges[3].end.x, shadowEdges[0].end.y),
+            vec2(shadowEdges[3].end.x, shadowEdges[0].end.y),
             shadowEdges[3].end,
             shadowEdges[3].start,
             shadowEdges[2].start
@@ -723,8 +725,8 @@ export class Light {
                 lightPosition.x,
                 lightPosition.y,
                 lightRadius + Light.SHADOW_BUFFER,
-                vec.rad(vec.sub(shadowEdges[0].end, shadowEdges[0].start)),
-                vec.rad(vec.sub(shadowEdges[5].end, shadowEdges[5].start)),
+                vec2.rad(vec2.sub(shadowEdges[0].end, shadowEdges[0].start)),
+                vec2.rad(vec2.sub(shadowEdges[5].end, shadowEdges[5].start)),
                 false
               );
             },
@@ -739,8 +741,8 @@ export class Light {
                 lightPosition.x,
                 lightPosition.y,
                 lightRadius + Light.SHADOW_BUFFER,
-                vec.rad(vec.sub(shadowEdges[0].end, shadowEdges[0].start)),
-                vec.rad(vec.sub(shadowEdges[5].end, shadowEdges[5].start)),
+                vec2.rad(vec2.sub(shadowEdges[0].end, shadowEdges[0].start)),
+                vec2.rad(vec2.sub(shadowEdges[5].end, shadowEdges[5].start)),
                 false
               );
             },
@@ -760,16 +762,16 @@ export class Light {
           shadowPolygon.push(
             shadowEdges[0].start,
             shadowEdges[0].end,
-            vec(shadowEdges[0].end.x, shadowEdges[3].end.y),
+            vec2(shadowEdges[0].end.x, shadowEdges[3].end.y),
             shadowEdges[3].end,
             shadowEdges[3].start,
-            vec.add(shadowCasterRectangle.position, shadowCasterRectangle.size)
+            vec2.add(shadowCasterRectangle.position, shadowCasterRectangle.size)
           );
         } else {
           shadowPolygon.push(
             shadowEdges[0].start,
             shadowEdges[0].end,
-            vec(shadowEdges[0].end.x, shadowEdges[3].end.y),
+            vec2(shadowEdges[0].end.x, shadowEdges[3].end.y),
             shadowEdges[3].end,
             shadowEdges[3].start,
             shadowEdges[2].start

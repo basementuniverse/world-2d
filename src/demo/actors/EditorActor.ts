@@ -1,6 +1,6 @@
 import Debug from '@basementuniverse/debug';
 import InputManager from '@basementuniverse/input-manager';
-import { vec } from '@basementuniverse/vec';
+import { vec2 } from '@basementuniverse/vec';
 import { Actor } from '../Actor';
 import * as constants from '../constants';
 import Game from '../Game';
@@ -18,21 +18,21 @@ export abstract class EditorActor implements Actor {
 
   protected abstract readonly debugColour: string;
   protected abstract readonly debugHoverColour: string;
-  protected abstract readonly minSize: vec;
-  protected abstract readonly maxSize: vec;
-  protected labelOffset?: vec;
+  protected abstract readonly minSize: vec2;
+  protected abstract readonly maxSize: vec2;
+  protected labelOffset: vec2 = vec2();
 
   protected scene: LightingScene;
   public id: string = '';
   public folder: dat.GUI | null = null;
 
-  public position: vec = vec();
-  public size: vec = vec(64, 64);
+  public position: vec2 = vec2();
+  public size: vec2 = vec2(64, 64);
 
   public hovered = false;
   public selected = false;
   protected dragging = false;
-  private dragOffset: vec | null = null;
+  private dragOffset: vec2 | null = null;
 
   public constructor(scene: LightingScene) {
     this.scene = scene;
@@ -73,14 +73,14 @@ export abstract class EditorActor implements Actor {
     this.object.remove();
   }
 
-  protected isHovered(mouseWorldPosition: vec): boolean {
+  protected isHovered(mouseWorldPosition: vec2): boolean {
     return pointInRectangle(mouseWorldPosition, {
       position: this.position,
       size: this.size,
     });
   }
 
-  protected dragPosition(position: vec) {
+  protected dragPosition(position: vec2) {
     const newPosition = InputManager.keyDown('ShiftLeft')
       ? quantizeVec(position, constants.GRID_SIZE)
       : position;
@@ -89,8 +89,8 @@ export abstract class EditorActor implements Actor {
     this.position.y = newPosition.y;
   }
 
-  protected dragSize(mouseWorldPosition: vec) {
-    let newSize = vec.sub(mouseWorldPosition, this.position);
+  protected dragSize(mouseWorldPosition: vec2) {
+    let newSize = vec2.sub(mouseWorldPosition, this.position);
     if (InputManager.keyDown('ShiftLeft')) {
       newSize = quantizeVec(newSize, constants.GRID_SIZE);
     }
@@ -109,7 +109,7 @@ export abstract class EditorActor implements Actor {
 
     if (InputManager.mouseDown() && this.selected && !this.dragging) {
       this.dragging = true;
-      this.dragOffset = vec.sub(mouseWorldPosition, this.position);
+      this.dragOffset = vec2.sub(mouseWorldPosition, this.position);
     }
 
     if (!InputManager.mouseDown()) {
@@ -121,7 +121,7 @@ export abstract class EditorActor implements Actor {
       if (InputManager.keyDown('ControlLeft')) {
         this.dragSize(mouseWorldPosition);
       } else {
-        this.dragPosition(vec.sub(mouseWorldPosition, this.dragOffset));
+        this.dragPosition(vec2.sub(mouseWorldPosition, this.dragOffset));
       }
     }
 
@@ -130,8 +130,11 @@ export abstract class EditorActor implements Actor {
   }
 
   protected drawDebug() {
+    if (!Game.DEBUG_MODES[Game.debugMode].borders) {
+      return;
+    }
+
     Debug.border(`${this.type} ${this.id}`, '', this.position, {
-      level: 1,
       space: 'world',
       showLabel: this.selected || Game.DEBUG_MODES[Game.debugMode].labels,
       showValue: false,

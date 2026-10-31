@@ -11,16 +11,18 @@
   "author": "Gordon Larrigan <gordonlarrigan@gmail.com> (https://gordonlarrigan.com)",
   "license": "MIT",
   "dependencies": {
+    "@basementuniverse/camera": "^1.8.0",
     "@basementuniverse/parsecolor": "^1.0.2",
-    "@basementuniverse/utils": "^1.4.0",
-    "@basementuniverse/vec": "^1.0.2"
+    "@basementuniverse/sprite": "^1.5.0",
+    "@basementuniverse/utils": "^1.8.1",
+    "@basementuniverse/vec": "^2.5.1"
   },
   "devDependencies": {
-    "@basementuniverse/camera": "^1.4.0",
-    "@basementuniverse/content-manager": "^2.0.0",
-    "@basementuniverse/debug": "^1.2.1",
-    "@basementuniverse/input-manager": "^1.1.0",
-    "@basementuniverse/scene-manager": "^1.3.0",
+    "@basementuniverse/content-manager": "^2.1.0",
+    "@basementuniverse/debug": "^1.5.0",
+    "@basementuniverse/input-manager": "^2.1.0",
+    "@basementuniverse/scene-manager": "^1.5.0",
+    "@basementuniverse/texture-atlas": "^1.4.0",
     "@types/dat.gui": "^0.7.13",
     "@types/node": "^18.11.12",
     "@types/uuid": "^10.0.0",
@@ -32,5 +34,5 @@
     "webpack": "^5.3.2",
     "webpack-cli": "^4.1.0"
   },
-  "types": "build/lighting/index.d.ts"
+  "types": "build/index.d.ts"
 }

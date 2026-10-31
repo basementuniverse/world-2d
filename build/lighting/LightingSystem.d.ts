@@ -1,12 +1,19 @@
-import { vec } from '@basementuniverse/vec';
-import { Actor, ActorOptions } from './Actor';
+import { vec2 } from '@basementuniverse/vec';
+import { GlContext, SceneCamera } from '../core';
+import { Actor, ActorOptions, SpriteActorOptions } from './Actor';
 import { CircleCaster, CircleCasterOptions, RegionCaster, RegionCasterOptions, SpriteCaster, SpriteCasterOptions } from './Caster';
 import { Light, LightOptions } from './Light';
 import { SceneObject } from './SceneObject';
 import { GroundReceiver, GroundReceiverOptions, WallReceiver, WallReceiverOptions } from './Surface';
-import { LightingCamera } from './types';
 import { Wall, WallOptions } from './Wall';
 export type LightingSystemOptions = {
+    /**
+     * Should lighting be applied to the scene?
+     *
+     * If this is false then the scene will be drawn without any lighting, and
+     * WebGL won't be used
+     */
+    lightingEnabled: boolean;
     /**
      * Should image smoothing be enabled?
      *
@@ -94,12 +101,13 @@ export declare class LightingSystem {
     /**
      * The size of the most recently rendered screen
      */
-    screen: vec;
+    screen: vec2;
     private groundReceivers;
     private wallReceivers;
     private regionCasters;
     private spriteCasters;
     private circleCasters;
+    private actors;
     private lightMapContext;
     lightMapCanvas: HTMLCanvasElement;
     private specularLightMapContext;
@@ -108,9 +116,14 @@ export declare class LightingSystem {
     sceneNormalMapCanvas: HTMLCanvasElement;
     private sceneSpecularMapContext;
     sceneSpecularMapCanvas: HTMLCanvasElement;
+    private glContext;
     private shaderPass;
     private specularVisible;
-    constructor(options?: Partial<LightingSystemOptions>);
+    /**
+     * `glContext` lets the lighting system share a WebGL context with other
+     * systems, otherwise it will create its own
+     */
+    constructor(options?: Partial<LightingSystemOptions>, glContext?: GlContext);
     /**
      * Add an area of ground that receives light and shadows
      */
@@ -123,7 +136,7 @@ export declare class LightingSystem {
     /**
      * Add a moving object that receives light and casts a shadow
      */
-    addActor(options: ActorOptions): Actor;
+    addActor(options: ActorOptions | SpriteActorOptions): Actor;
     /**
      * Add a light
      */
@@ -149,7 +162,7 @@ export declare class LightingSystem {
     /**
      * Remove an object or light from the lighting system
      */
-    remove(object: SceneObject<any> | Light): void;
+    remove(object: SceneObject<any> | Light | Actor): void;
     /**
      * Merge wall receivers and region casters that are adjacent to each other
      * and perfectly connected on one side, so that there are fewer to process
@@ -177,19 +190,32 @@ export declare class LightingSystem {
      * the camera's transforms applied, otherwise we'll draw all of the surfaces
      * that have been added to the lighting system
      */
-    render(context: CanvasRenderingContext2D, camera: LightingCamera, drawScene?: (context: CanvasRenderingContext2D) => void): void;
+    render(context: CanvasRenderingContext2D, camera: SceneCamera, drawScene?: (context: CanvasRenderingContext2D) => void): void;
     /**
      * Draw all of the surfaces that have been added to the lighting system
      */
     drawSurfaces(context: CanvasRenderingContext2D): void;
-    private sortSurfaces;
+    /**
+     * Draw the ground, this is the part of the scene that's underneath everything
+     * else
+     */
+    drawGround(context: CanvasRenderingContext2D): void;
+    /**
+     * Draw the walls and actors that stand on the ground
+     */
+    drawWalls(context: CanvasRenderingContext2D): void;
+    /**
+     * Make sure surfaces are up to date and in drawing order, actors come first
+     * because moving an actor can change the order
+     */
+    private updateSurfaces;
     /**
      * Prepare the lightmaps for rendering
      *
      * If WebGL isn't available then lightmaps are left as they are, so the scene
      * keeps its last lighting when the context is lost and then restored
      */
-    prepare(camera: LightingCamera, screen: vec): void;
+    prepare(camera: SceneCamera, screen: vec2): void;
     /**
      * Get a canvas showing which surface is at each pixel, for debugging
      *

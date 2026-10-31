@@ -3,16 +3,16 @@ import Debug from '@basementuniverse/debug';
 import InputManager from '@basementuniverse/input-manager';
 import { Scene } from '@basementuniverse/scene-manager';
 import { at } from '@basementuniverse/utils';
-import { vec } from '@basementuniverse/vec';
-import { LightingSystem } from '../../lighting';
-import { Line, Rectangle, Sector2d } from '../../lighting/types';
+import { vec2 } from '@basementuniverse/vec';
 import {
-  polygon,
+  Rectangle,
+  rectanglesIntersect,
   rectangleToInterval,
   rectangleVertices,
-  rectanglesIntersect,
-  sector2d,
-} from '../../lighting/utilities';
+} from '../../core';
+import { LightingSystem } from '../../lighting';
+import { Line, Sector2d } from '../../lighting/types';
+import { polygon, sector2d } from '../../lighting/utilities';
 import { LightActor } from '../actors/LightActor';
 import { RegionShadowCasterActor } from '../actors/RegionShadowCasterActor';
 import { WallShadowReceiverActor } from '../actors/WallShadowReceiverActor';
@@ -22,23 +22,23 @@ import { lineInRectangle, lineYIntercept } from '../utilities';
 
 export class TestScene extends Scene {
   private TEST_RECT: Rectangle = {
-    position: vec(200, 200),
-    size: vec(300, 200),
+    position: vec2(200, 200),
+    size: vec2(300, 200),
   };
   private TEST_Y = 700;
 
   public camera: Camera;
   public lightingSystem = new LightingSystem();
 
-  private lineStart: vec | null = null;
-  private lineEnd: vec | null = null;
+  private lineStart: vec2 | null = null;
+  private lineEnd: vec2 | null = null;
 
   private caster: RegionShadowCasterActor;
   private receiver: WallShadowReceiverActor;
   private light: LightActor;
 
   public initialise() {
-    this.camera = new Camera(vec(), {
+    this.camera = new Camera(vec2(), {
       minScale: 0.5,
       maxScale: 5,
       moveEaseAmount: 0.95,
@@ -48,19 +48,19 @@ export class TestScene extends Scene {
     this.caster = new RegionShadowCasterActor(
       this as unknown as LightingScene,
       {
-        position: vec(200, 500),
-        size: vec(100, 100),
+        position: vec2(200, 500),
+        size: vec2(100, 100),
       }
     );
     this.receiver = new WallShadowReceiverActor(
       this as unknown as LightingScene,
       {
-        position: vec(350, 500),
-        size: vec(100, 100),
+        position: vec2(350, 500),
+        size: vec2(100, 100),
       }
     );
     this.light = new LightActor(this as unknown as LightingScene, {
-      position: vec(300, 300),
+      position: vec2(300, 300),
       radius: 10,
     });
   }
@@ -70,16 +70,16 @@ export class TestScene extends Scene {
     Debug.value('B-click to set line end', '');
     Debug.value('CTRL-drag to resize', '');
 
-    this.camera.positionImmediate = vec(Game.screen.x / 2, Game.screen.y / 2);
+    this.camera.positionImmediate = vec2(Game.screen.x / 2, Game.screen.y / 2);
     this.camera.update(Game.screen);
 
     if (InputManager.mousePressed()) {
       if (InputManager.keyDown('KeyA')) {
-        this.lineStart = vec.cpy(InputManager.mousePosition);
+        this.lineStart = vec2.cpy(InputManager.mousePosition);
       }
 
       if (InputManager.keyDown('KeyB')) {
-        this.lineEnd = vec.cpy(InputManager.mousePosition);
+        this.lineEnd = vec2.cpy(InputManager.mousePosition);
       }
     }
 
@@ -129,7 +129,7 @@ export class TestScene extends Scene {
     // Test lineInRect
     // -------------------------------------------------------------------------
     // #region
-    let t1: vec | null = null;
+    let t1: vec2 | null = null;
     if (this.lineStart && this.lineEnd) {
       t1 = lineInRectangle(
         {
@@ -188,11 +188,11 @@ export class TestScene extends Scene {
 
     context.lineWidth = 1;
     context.strokeStyle = 'grey';
-    this.line(context, vec(0, this.TEST_Y), vec(Game.screen.x, this.TEST_Y));
+    this.line(context, vec2(0, this.TEST_Y), vec2(Game.screen.x, this.TEST_Y));
     context.stroke();
 
     if (t2) {
-      Debug.marker('t2', '', vec(t2[0], this.TEST_Y));
+      Debug.marker('t2', '', vec2(t2[0], this.TEST_Y));
     }
     // #endregion
 
@@ -241,31 +241,31 @@ export class TestScene extends Scene {
       const current = wallVertices[i];
 
       if (!this.edgeIsFacingLight(lightPosition, previous, current)) {
-        const vertex1 = vec.sub(previous, lightPosition);
-        const vertex2 = vec.sub(current, lightPosition);
+        const vertex1 = vec2.sub(previous, lightPosition);
+        const vertex2 = vec2.sub(current, lightPosition);
         shadowEdges.push(
           {
             start: previous,
-            end: vec.add(
+            end: vec2.add(
               previous,
-              vec.mul(
-                vec.nor(vertex1),
+              vec2.mul(
+                vec2.nor(vertex1),
                 Math.max(
                   SHADOW_BUFFER,
-                  lightRadius + SHADOW_BUFFER - vec.len(vertex1)
+                  lightRadius + SHADOW_BUFFER - vec2.len(vertex1)
                 )
               )
             ),
           },
           {
             start: current,
-            end: vec.add(
+            end: vec2.add(
               current,
-              vec.mul(
-                vec.nor(vertex2),
+              vec2.mul(
+                vec2.nor(vertex2),
                 Math.max(
                   SHADOW_BUFFER,
-                  lightRadius + SHADOW_BUFFER - vec.len(vertex2)
+                  lightRadius + SHADOW_BUFFER - vec2.len(vertex2)
                 )
               )
             ),
@@ -273,14 +273,17 @@ export class TestScene extends Scene {
         );
       }
 
-      const edge = vec.nor(vec.sub(current, previous));
-      const edgeNormal = vec(edge.y, -edge.x);
-      const lightNormal = vec.nor(
-        vec.sub(vec.mul(vec.add(previous, current), 0.5), this.light.position)
+      const edge = vec2.nor(vec2.sub(current, previous));
+      const edgeNormal = vec2(edge.y, -edge.x);
+      const lightNormal = vec2.nor(
+        vec2.sub(
+          vec2.mul(vec2.add(previous, current), 0.5),
+          this.light.position
+        )
       );
       // Check if edge is facing away from the light
-      if (vec.dot(lightNormal, edgeNormal) > 0) {
-        const t = vec.mul(vec.add(previous, current), 0.5);
+      if (vec2.dot(lightNormal, edgeNormal) > 0) {
+        const t = vec2.mul(vec2.add(previous, current), 0.5);
         context.strokeStyle = 'yellow';
         context.lineWidth = 3;
         // this.line(context, previous, current);
@@ -289,15 +292,15 @@ export class TestScene extends Scene {
         // this.arrow(
         //   context,
         //   t,
-        //   vec.add(t, vec.mul(edgeNormal, 10))
+        //   vec2.add(t, vec2.mul(edgeNormal, 10))
         // );
         const [a, b] = [previous, current];
-        const aDelta = vec.sub(a, this.light.position);
-        const bDelta = vec.sub(b, this.light.position);
-        let v1 = vec(a);
-        let v4 = vec(b);
-        const v2 = vec.add(v1, vec.mul(aDelta, 1));
-        const v3 = vec.add(v4, vec.mul(bDelta, 1));
+        const aDelta = vec2.sub(a, this.light.position);
+        const bDelta = vec2.sub(b, this.light.position);
+        let v1 = vec2(a);
+        let v4 = vec2(b);
+        const v2 = vec2.add(v1, vec2.mul(aDelta, 1));
+        const v3 = vec2.add(v4, vec2.mul(bDelta, 1));
         context.strokeStyle = 'red';
         context.lineWidth = 3;
         context.lineJoin = 'bevel';
@@ -364,7 +367,7 @@ export class TestScene extends Scene {
             this.caster.position,
             shadowEdges[0].start,
             shadowEdges[0].end,
-            vec(shadowEdges[0].end.x, shadowEdges[3].end.y),
+            vec2(shadowEdges[0].end.x, shadowEdges[3].end.y),
             shadowEdges[3].end,
             shadowEdges[3].start
           );
@@ -373,7 +376,7 @@ export class TestScene extends Scene {
             context,
             shadowEdges[0].start,
             shadowEdges[0].end,
-            vec(shadowEdges[0].end.x, shadowEdges[3].end.y),
+            vec2(shadowEdges[0].end.x, shadowEdges[3].end.y),
             shadowEdges[3].end,
             shadowEdges[3].start,
             shadowEdges[2].start
@@ -399,8 +402,8 @@ export class TestScene extends Scene {
                 lightPosition.x,
                 lightPosition.y,
                 lightRadius + SHADOW_BUFFER,
-                vec.rad(vec.sub(shadowEdges[2].end, shadowEdges[2].start)),
-                vec.rad(vec.sub(shadowEdges[1].end, shadowEdges[1].start)),
+                vec2.rad(vec2.sub(shadowEdges[2].end, shadowEdges[2].start)),
+                vec2.rad(vec2.sub(shadowEdges[1].end, shadowEdges[1].start)),
                 false
               );
             }
@@ -415,8 +418,8 @@ export class TestScene extends Scene {
                 lightPosition.x,
                 lightPosition.y,
                 lightRadius + SHADOW_BUFFER,
-                vec.rad(vec.sub(shadowEdges[2].end, shadowEdges[2].start)),
-                vec.rad(vec.sub(shadowEdges[1].end, shadowEdges[1].start)),
+                vec2.rad(vec2.sub(shadowEdges[2].end, shadowEdges[2].start)),
+                vec2.rad(vec2.sub(shadowEdges[1].end, shadowEdges[1].start)),
                 false
               );
             },
@@ -438,13 +441,13 @@ export class TestScene extends Scene {
           polygon(
             context,
             shadowEdges[1].start,
-            vec(
+            vec2(
               this.caster.position.x + this.caster.size.x,
               this.caster.position.y
             ),
             shadowEdges[2].start,
             shadowEdges[2].end,
-            vec(shadowEdges[1].end.x, shadowEdges[2].end.y),
+            vec2(shadowEdges[1].end.x, shadowEdges[2].end.y),
             shadowEdges[1].end
           );
         } else {
@@ -452,7 +455,7 @@ export class TestScene extends Scene {
             context,
             shadowEdges[2].start,
             shadowEdges[2].end,
-            vec(shadowEdges[1].end.x, shadowEdges[2].end.y),
+            vec2(shadowEdges[1].end.x, shadowEdges[2].end.y),
             shadowEdges[1].end,
             shadowEdges[1].start,
             shadowEdges[3].start
@@ -477,8 +480,8 @@ export class TestScene extends Scene {
                 lightPosition.x,
                 lightPosition.y,
                 lightRadius + SHADOW_BUFFER,
-                vec.rad(vec.sub(shadowEdges[0].end, shadowEdges[0].start)),
-                vec.rad(vec.sub(shadowEdges[5].end, shadowEdges[5].start)),
+                vec2.rad(vec2.sub(shadowEdges[0].end, shadowEdges[0].start)),
+                vec2.rad(vec2.sub(shadowEdges[5].end, shadowEdges[5].start)),
                 false
               );
             },
@@ -494,8 +497,8 @@ export class TestScene extends Scene {
                 lightPosition.x,
                 lightPosition.y,
                 lightRadius + SHADOW_BUFFER,
-                vec.rad(vec.sub(shadowEdges[0].end, shadowEdges[0].start)),
-                vec.rad(vec.sub(shadowEdges[5].end, shadowEdges[5].start)),
+                vec2.rad(vec2.sub(shadowEdges[0].end, shadowEdges[0].start)),
+                vec2.rad(vec2.sub(shadowEdges[5].end, shadowEdges[5].start)),
                 false
               );
             },
@@ -527,8 +530,8 @@ export class TestScene extends Scene {
                 lightPosition.x,
                 lightPosition.y,
                 lightRadius + SHADOW_BUFFER,
-                vec.rad(vec.sub(shadowEdges[4].end, shadowEdges[4].start)),
-                vec.rad(vec.sub(shadowEdges[3].end, shadowEdges[3].start)),
+                vec2.rad(vec2.sub(shadowEdges[4].end, shadowEdges[4].start)),
+                vec2.rad(vec2.sub(shadowEdges[3].end, shadowEdges[3].start)),
                 false
               );
             }
@@ -543,8 +546,8 @@ export class TestScene extends Scene {
                 lightPosition.x,
                 lightPosition.y,
                 lightRadius + SHADOW_BUFFER,
-                vec.rad(vec.sub(shadowEdges[4].end, shadowEdges[4].start)),
-                vec.rad(vec.sub(shadowEdges[3].end, shadowEdges[3].start)),
+                vec2.rad(vec2.sub(shadowEdges[4].end, shadowEdges[4].start)),
+                vec2.rad(vec2.sub(shadowEdges[3].end, shadowEdges[3].start)),
                 false
               );
             },
@@ -567,10 +570,10 @@ export class TestScene extends Scene {
             context,
             shadowEdges[0].start,
             shadowEdges[0].end,
-            vec(shadowEdges[3].end.x, shadowEdges[0].end.y),
+            vec2(shadowEdges[3].end.x, shadowEdges[0].end.y),
             shadowEdges[3].end,
             shadowEdges[3].start,
-            vec(
+            vec2(
               this.caster.position.x,
               this.caster.position.y + this.caster.size.y
             )
@@ -580,7 +583,7 @@ export class TestScene extends Scene {
             context,
             shadowEdges[0].start,
             shadowEdges[0].end,
-            vec(shadowEdges[3].end.x, shadowEdges[0].end.y),
+            vec2(shadowEdges[3].end.x, shadowEdges[0].end.y),
             shadowEdges[3].end,
             shadowEdges[3].start,
             shadowEdges[2].start
@@ -605,8 +608,8 @@ export class TestScene extends Scene {
                 lightPosition.x,
                 lightPosition.y,
                 lightRadius + SHADOW_BUFFER,
-                vec.rad(vec.sub(shadowEdges[0].end, shadowEdges[0].start)),
-                vec.rad(vec.sub(shadowEdges[5].end, shadowEdges[5].start)),
+                vec2.rad(vec2.sub(shadowEdges[0].end, shadowEdges[0].start)),
+                vec2.rad(vec2.sub(shadowEdges[5].end, shadowEdges[5].start)),
                 false
               );
             },
@@ -622,8 +625,8 @@ export class TestScene extends Scene {
                 lightPosition.x,
                 lightPosition.y,
                 lightRadius + SHADOW_BUFFER,
-                vec.rad(vec.sub(shadowEdges[0].end, shadowEdges[0].start)),
-                vec.rad(vec.sub(shadowEdges[5].end, shadowEdges[5].start)),
+                vec2.rad(vec2.sub(shadowEdges[0].end, shadowEdges[0].start)),
+                vec2.rad(vec2.sub(shadowEdges[5].end, shadowEdges[5].start)),
                 false
               );
             },
@@ -646,17 +649,17 @@ export class TestScene extends Scene {
             context,
             shadowEdges[0].start,
             shadowEdges[0].end,
-            vec(shadowEdges[0].end.x, shadowEdges[3].end.y),
+            vec2(shadowEdges[0].end.x, shadowEdges[3].end.y),
             shadowEdges[3].end,
             shadowEdges[3].start,
-            vec.add(this.caster.position, this.caster.size)
+            vec2.add(this.caster.position, this.caster.size)
           );
         } else {
           polygon(
             context,
             shadowEdges[0].start,
             shadowEdges[0].end,
-            vec(shadowEdges[0].end.x, shadowEdges[3].end.y),
+            vec2(shadowEdges[0].end.x, shadowEdges[3].end.y),
             shadowEdges[3].end,
             shadowEdges[3].start,
             shadowEdges[2].start
@@ -688,7 +691,7 @@ export class TestScene extends Scene {
           Debug.marker(
             'right_intercept',
             '',
-            vec(
+            vec2(
               Math.max(rightIntercept[0], receiverInterval.left),
               receiverInterval.bottom
             )
@@ -703,7 +706,7 @@ export class TestScene extends Scene {
           Debug.marker(
             'left_intercept',
             '',
-            vec(
+            vec2(
               Math.min(leftIntercept[0], receiverInterval.right),
               receiverInterval.bottom
             )
@@ -775,12 +778,12 @@ export class TestScene extends Scene {
       // Debug.marker(
       //   'min',
       //   '',
-      //   vec(min, receiverInterval.bottom)
+      //   vec2(min, receiverInterval.bottom)
       // );
       // Debug.marker(
       //   'max',
       //   '',
-      //   vec(max, receiverInterval.bottom)
+      //   vec2(max, receiverInterval.bottom)
       // );
 
       // Don't render the shadow if it's got negative width
@@ -794,35 +797,35 @@ export class TestScene extends Scene {
       }
 
       if (show) {
-        Debug.border(`wall_shadow`, '', vec(min, receiverInterval.top), {
+        Debug.border(`wall_shadow`, '', vec2(min, receiverInterval.top), {
           showLabel: false,
           showValue: false,
-          size: vec(max - min, this.receiver.size.y),
+          size: vec2(max - min, this.receiver.size.y),
           borderColour: 'purple',
           borderWidth: 3,
         });
       }
     }
 
-    Debug.draw(context, Game.DEBUG_MODES[Game.debugMode].debugLevel);
+    Debug.draw(context);
     context.restore();
   }
 
   private edgeIsFacingLight(
-    lightPosition: vec,
-    edgeA: vec,
-    edgeB: vec
+    lightPosition: vec2,
+    edgeA: vec2,
+    edgeB: vec2
   ): boolean {
-    const edge = vec.nor(vec.sub(edgeB, edgeA));
-    const edgeNormal = vec(edge.y, -edge.x);
-    const lightNormal = vec.nor(
-      vec.sub(vec.mul(vec.add(edgeA, edgeB), 0.5), lightPosition)
+    const edge = vec2.nor(vec2.sub(edgeB, edgeA));
+    const edgeNormal = vec2(edge.y, -edge.x);
+    const lightNormal = vec2.nor(
+      vec2.sub(vec2.mul(vec2.add(edgeA, edgeB), 0.5), lightPosition)
     );
 
-    return vec.dot(lightNormal, edgeNormal) <= 0;
+    return vec2.dot(lightNormal, edgeNormal) <= 0;
   }
 
-  private line(context: CanvasRenderingContext2D, a: vec, b: vec) {
+  private line(context: CanvasRenderingContext2D, a: vec2, b: vec2) {
     context.save();
     context.beginPath();
     context.moveTo(a.x, a.y);
@@ -831,7 +834,7 @@ export class TestScene extends Scene {
     context.restore();
   }
 
-  private arrow(context: CanvasRenderingContext2D, a: vec, b: vec) {
+  private arrow(context: CanvasRenderingContext2D, a: vec2, b: vec2) {
     this.line(context, a, b);
     const theta = Math.atan2(b.y - a.y, b.x - a.x);
     this.triangle(context, b, theta);
@@ -839,7 +842,7 @@ export class TestScene extends Scene {
 
   private triangle(
     context: CanvasRenderingContext2D,
-    position: vec,
+    position: vec2,
     theta: number
   ) {
     context.save();

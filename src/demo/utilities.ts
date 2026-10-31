@@ -1,27 +1,31 @@
 import { clamp, floatEquals } from '@basementuniverse/utils';
-import { vec } from '@basementuniverse/vec';
-import { Rectangle } from '../lighting';
-import { Interval1d, Interval2d, Line } from '../lighting/types';
-import { rectangleToInterval } from '../lighting/utilities';
+import { vec2 } from '@basementuniverse/vec';
+import {
+  Interval1d,
+  Interval2d,
+  Rectangle,
+  rectangleToInterval,
+} from '../core';
+import { Line } from '../lighting/types';
 
 /**
  * Clamp a vector between min and max
  */
-export function clampVec(v: vec, min: vec, max: vec): vec {
-  return vec(clamp(v.x, min.x, max.x), clamp(v.y, min.y, max.y));
+export function clampVec(v: vec2, min: vec2, max: vec2): vec2 {
+  return vec2(clamp(v.x, min.x, max.x), clamp(v.y, min.y, max.y));
 }
 
 /**
  * Quantize a vector to a grid
  */
-export function quantizeVec(v: vec, quant: number): vec {
-  return vec.map(v, n => Math.round(n / quant) * quant);
+export function quantizeVec(v: vec2, quant: number): vec2 {
+  return vec2.map(v, n => Math.round(n / quant) * quant);
 }
 
 /**
  * Check if a point is inside a 2d interval
  */
-export function pointInInterval(point: vec, interval: Interval2d): boolean {
+export function pointInInterval(point: vec2, interval: Interval2d): boolean {
   return (
     point.x >= interval.left &&
     point.x <= interval.right &&
@@ -33,7 +37,7 @@ export function pointInInterval(point: vec, interval: Interval2d): boolean {
 /**
  * Check if a point is inside an AABB rectangle
  */
-export function pointInRectangle(point: vec, rectangle: Rectangle): boolean {
+export function pointInRectangle(point: vec2, rectangle: Rectangle): boolean {
   return pointInInterval(point, rectangleToInterval(rectangle));
 }
 
@@ -45,8 +49,8 @@ export function pointInRectangle(point: vec, rectangle: Rectangle): boolean {
  *
  * If the line begins inside the interval, return null
  */
-export function lineInInterval(line: Line, interval: Interval2d): vec | null {
-  if (vec.eq(line.start, line.end)) {
+export function lineInInterval(line: Line, interval: Interval2d): vec2 | null {
+  if (vec2.eq(line.start, line.end)) {
     return null;
   }
 
@@ -107,7 +111,7 @@ export function lineInInterval(line: Line, interval: Interval2d): vec | null {
  *
  * If the line begins inside the rectangle, return null
  */
-export function lineInRectangle(line: Line, rectangle: Rectangle): vec | null {
+export function lineInRectangle(line: Line, rectangle: Rectangle): vec2 | null {
   return lineInInterval(line, rectangleToInterval(rectangle));
 }
 
@@ -150,8 +154,8 @@ export function overlap2d(a: Interval2d, b: Interval2d): Interval2d | null {
  * by the y position of their bottom edge
  */
 export function sortActors(
-  a: { position: vec; size: vec; zIndex: number },
-  b: { position: vec; size: vec; zIndex: number }
+  a: { position: vec2; size: vec2; zIndex: number },
+  b: { position: vec2; size: vec2; zIndex: number }
 ): number {
   return (
     a.zIndex - b.zIndex || a.position.y + a.size.y - (b.position.y + b.size.y)

@@ -1,7 +1,15 @@
 import { parseColor } from '@basementuniverse/parsecolor';
 import { floatEquals } from '@basementuniverse/utils';
-import { vec } from '@basementuniverse/vec';
-import { Actor, ActorOptions } from './Actor';
+import { vec2 } from '@basementuniverse/vec';
+import {
+  Colour,
+  GlContext,
+  intervalToRectangle,
+  lerpColour,
+  rectanglesIntersect,
+  SceneCamera,
+} from '../core';
+import { Actor, ActorOptions, SpriteActorOptions } from './Actor';
 import {
   CircleCaster,
   CircleCasterOptions,
@@ -21,15 +29,17 @@ import {
   WallReceiver,
   WallReceiverOptions,
 } from './Surface';
-import { Colour, LightingCamera } from './types';
-import {
-  intervalToRectangle,
-  lerpColour,
-  rectanglesIntersect,
-} from './utilities';
 import { Wall, WallOptions } from './Wall';
 
 export type LightingSystemOptions = {
+  /**
+   * Should lighting be applied to the scene?
+   *
+   * If this is false then the scene will be drawn without any lighting, and
+   * WebGL won't be used
+   */
+  lightingEnabled: boolean;
+
   /**
    * Should image smoothing be enabled?
    *
@@ -127,6 +137,7 @@ export type LightingSystemOptions = {
 
 export class LightingSystem {
   private static readonly DEFAULT_OPTIONS: LightingSystemOptions = {
+    lightingEnabled: true,
     imageSmoothingEnabled: true,
     softShadowsEnabled: false,
     softShadowsAmount: 2,
@@ -163,13 +174,14 @@ export class LightingSystem {
   /**
    * The size of the most recently rendered screen
    */
-  public screen: vec = vec();
+  public screen: vec2 = vec2();
 
   private groundReceivers: GroundReceiver[] = [];
   private wallReceivers: WallReceiver[] = [];
   private regionCasters: RegionCaster[] = [];
   private spriteCasters: SpriteCaster[] = [];
   private circleCasters: CircleCaster[] = [];
+  private actors: Actor[] = [];
 
   private lightMapContext = LightingSystem.createContext();
   public lightMapCanvas = this.lightMapContext.canvas;
@@ -183,15 +195,24 @@ export class LightingSystem {
   private sceneSpecularMapContext = LightingSystem.createContext();
   public sceneSpecularMapCanvas = this.sceneSpecularMapContext.canvas;
 
+  private glContext: GlContext | null;
   private shaderPass: ShaderPass | null = null;
   private specularVisible = false;
 
-  public constructor(options?: Partial<LightingSystemOptions>) {
+  /**
+   * `glContext` lets the lighting system share a WebGL context with other
+   * systems, otherwise it will create its own
+   */
+  public constructor(
+    options?: Partial<LightingSystemOptions>,
+    glContext?: GlContext
+  ) {
     this.options = Object.assign(
       {},
       LightingSystem.DEFAULT_OPTIONS,
       options ?? {}
     );
+    this.glContext = glContext ?? null;
   }
 
   /**
@@ -215,8 +236,11 @@ export class LightingSystem {
   /**
    * Add a moving object that receives light and casts a shadow
    */
-  public addActor(options: ActorOptions): Actor {
-    return new Actor(this, options);
+  public addActor(options: ActorOptions | SpriteActorOptions): Actor {
+    const actor = new Actor(this, options);
+    this.actors.push(actor);
+
+    return actor;
   }
 
   /**
@@ -274,9 +298,14 @@ export class LightingSystem {
   /**
    * Remove an object or light from the lighting system
    */
-  public remove(object: SceneObject<any> | Light) {
+  public remove(object: SceneObject<any> | Light | Actor) {
     if (object instanceof Light) {
       this.lights = this.lights.filter(light => light !== object);
+      return;
+    }
+
+    if (object instanceof Actor) {
+      this.actors = this.actors.filter(actor => actor !== object);
       return;
     }
 
@@ -313,7 +342,7 @@ export class LightingSystem {
    * Get the shader pass, if it can be used
    */
   private getShaderPass(): ShaderPass | null {
-    this.shaderPass ??= new ShaderPass();
+    this.shaderPass ??= new ShaderPass(this.glContext ?? new GlContext());
 
     return this.shaderPass.available ? this.shaderPass : null;
   }
@@ -342,7 +371,7 @@ export class LightingSystem {
    */
   public render(
     context: CanvasRenderingContext2D,
-    camera: LightingCamera,
+    camera: SceneCamera,
     drawScene?: (context: CanvasRenderingContext2D) => void
   ) {
     context.save();
@@ -354,7 +383,7 @@ export class LightingSystem {
     }
     context.restore();
 
-    this.prepare(camera, vec(context.canvas.width, context.canvas.height));
+    this.prepare(camera, vec2(context.canvas.width, context.canvas.height));
     this.draw(context);
   }
 
@@ -362,12 +391,33 @@ export class LightingSystem {
    * Draw all of the surfaces that have been added to the lighting system
    */
   public drawSurfaces(context: CanvasRenderingContext2D) {
-    this.sortSurfaces();
+    this.drawGround(context);
+    this.drawWalls(context);
+  }
+
+  /**
+   * Draw the ground, this is the part of the scene that's underneath everything
+   * else
+   */
+  public drawGround(context: CanvasRenderingContext2D) {
+    this.updateSurfaces();
     this.groundReceivers.forEach(ground => ground.draw(context));
+  }
+
+  /**
+   * Draw the walls and actors that stand on the ground
+   */
+  public drawWalls(context: CanvasRenderingContext2D) {
+    this.updateSurfaces();
     this.wallReceivers.forEach(wall => wall.draw(context));
   }
 
-  private sortSurfaces() {
+  /**
+   * Make sure surfaces are up to date and in drawing order, actors come first
+   * because moving an actor can change the order
+   */
+  private updateSurfaces() {
+    this.actors.forEach(actor => actor.sync());
     this.groundReceivers.sort(LightingSystem.compareSurfaces);
     this.wallReceivers.sort(LightingSystem.compareSurfaces);
   }
@@ -378,9 +428,13 @@ export class LightingSystem {
    * If WebGL isn't available then lightmaps are left as they are, so the scene
    * keeps its last lighting when the context is lost and then restored
    */
-  public prepare(camera: LightingCamera, screen: vec) {
+  public prepare(camera: SceneCamera, screen: vec2) {
     this.screen = screen;
-    this.sortSurfaces();
+    this.updateSurfaces();
+
+    if (!this.options.lightingEnabled) {
+      return;
+    }
 
     const shaderPass = this.getShaderPass();
     if (!shaderPass) {
@@ -471,7 +525,7 @@ export class LightingSystem {
    * Find the ambient light on each surface
    */
   private calculateAmbientLights(surfaces: Surface<any>[]): ShaderSurface[] {
-    const direction = vec.rot(vec(1, 0), this.options.ambientLightDirection);
+    const direction = vec2.rot(vec2(1, 0), this.options.ambientLightDirection);
     const ambientLight = parseColor(this.options.ambientLightColour);
     const shadow = parseColor(this.options.ambientLightShadowColour);
     const highlight = parseColor(this.options.ambientLightHighlightColour);
@@ -495,17 +549,17 @@ export class LightingSystem {
    * Calculate the actual colour of ambient light based on the surface normal
    */
   private calculateAmbientLight(
-    surfaceNormal: vec,
-    ambientLightDirection: vec,
+    surfaceNormal: vec2,
+    ambientLightDirection: vec2,
     ambientLight: Colour,
     ambientLightShadow: Colour,
     ambientLightHighlight: Colour
   ): Colour {
-    if (vec.eq(surfaceNormal, vec())) {
+    if (vec2.eq(surfaceNormal, vec2())) {
       return ambientLight;
     }
 
-    const dot = vec.dot(vec.nor(surfaceNormal), ambientLightDirection);
+    const dot = vec2.dot(vec2.nor(surfaceNormal), ambientLightDirection);
     if (floatEquals(dot, 0)) {
       return ambientLight;
     }
@@ -537,6 +591,10 @@ export class LightingSystem {
    * Overlay the lightmap onto the context
    */
   public draw(context: CanvasRenderingContext2D) {
+    if (!this.options.lightingEnabled) {
+      return;
+    }
+
     context.save();
 
     context.setTransform(1, 0, 0, 1, 0, 0);
@@ -556,7 +614,7 @@ export class LightingSystem {
   /**
    * Draw normal maps for surfaces in the scene
    */
-  private drawSceneNormalMap(camera: LightingCamera, surfaces: Surface<any>[]) {
+  private drawSceneNormalMap(camera: SceneCamera, surfaces: Surface<any>[]) {
     this.resetContext(this.sceneNormalMapContext);
     this.sceneNormalMapContext.save();
     camera.setTransforms(this.sceneNormalMapContext);
@@ -572,7 +630,7 @@ export class LightingSystem {
    * Draw specular maps for surfaces in the scene
    */
   private drawSceneSpecularMap(
-    camera: LightingCamera,
+    camera: SceneCamera,
     surfaces: Surface<any>[]
   ) {
     this.resetContext(this.sceneSpecularMapContext);

@@ -4,12 +4,13 @@ import SceneManager, {
   Scene,
   SceneTransitionState,
 } from '@basementuniverse/scene-manager';
-import { vec } from '@basementuniverse/vec';
-import * as content from '../../../content/content.json';
+import { vec2 } from '@basementuniverse/vec';
+import content from '../../../content/content.json';
 import * as constants from '../constants';
 import Game from '../Game';
 import { ProgressBar } from '../ProgressBar';
 import { LightingScene } from './LightingScene';
+import { ReflectionScene } from './ReflectionScene';
 
 export default class LoadingScene extends Scene {
   private static readonly TRANSITION_TIME: number = 0.5;
@@ -28,8 +29,8 @@ export default class LoadingScene extends Scene {
   public initialise() {
     this.finishedLoadingContent = false;
     this.progressBar = new ProgressBar(
-      vec.map(vec.mul(Game.screen, 1 / 2), Math.floor),
-      vec(200, 40)
+      vec2.map(vec2.mul(Game.screen, 1 / 2), Math.floor),
+      vec2(200, 40)
     );
     this.cooldownTime = LoadingScene.COOLDOWN_TIME;
 
@@ -43,8 +44,8 @@ export default class LoadingScene extends Scene {
   }
 
   public update(dt: number) {
-    this.progressBar.position = vec.map(
-      vec.mul(Game.screen, 1 / 2),
+    this.progressBar.position = vec2.map(
+      vec2.mul(Game.screen, 1 / 2),
       Math.floor
     );
     this.progressBar.progress = ContentManager.progress;
@@ -56,8 +57,16 @@ export default class LoadingScene extends Scene {
 
     if (this.cooldownTime <= 0) {
       SceneManager.pop();
-      SceneManager.push(new LightingScene());
+      SceneManager.push(this.createFirstScene());
     }
+  }
+
+  private createFirstScene(): Scene {
+    const scene = new URLSearchParams(location.search).get('scene');
+
+    return scene === 'reflections'
+      ? new ReflectionScene()
+      : new LightingScene();
   }
 
   public draw(context: CanvasRenderingContext2D) {

@@ -2,7 +2,7 @@ import ContentManager from '@basementuniverse/content-manager';
 import Debug from '@basementuniverse/debug';
 import InputManager from '@basementuniverse/input-manager';
 import SceneManager from '@basementuniverse/scene-manager';
-import { vec } from '@basementuniverse/vec';
+import { vec2 } from '@basementuniverse/vec';
 import * as dat from 'dat.gui';
 import * as constants from './constants';
 import LoadingScene from './scenes/LoadingScene';
@@ -10,19 +10,23 @@ import LoadingScene from './scenes/LoadingScene';
 export default class Game {
   public static DEBUG_MODES = {
     none: {
-      debugLevel: 3,
+      lights: false,
+      borders: false,
       labels: false,
     },
     lights: {
-      debugLevel: 2,
+      lights: true,
+      borders: false,
       labels: false,
     },
     borders: {
-      debugLevel: 0,
+      lights: true,
+      borders: true,
       labels: false,
     },
     all: {
-      debugLevel: 0,
+      lights: true,
+      borders: true,
       labels: true,
     },
   };
@@ -36,7 +40,7 @@ export default class Game {
   private frameRate: number = 0;
   private frameCount: number = 0;
 
-  public static screen: vec;
+  public static screen: vec2;
   public static gui: dat.GUI;
 
   public constructor(container: HTMLElement | null) {
@@ -121,7 +125,7 @@ export default class Game {
   }
 
   update(dt: number) {
-    Game.screen = vec(this.canvas.width, this.canvas.height);
+    Game.screen = vec2(this.canvas.width, this.canvas.height);
 
     SceneManager.update(dt);
     InputManager.update(); // Input manager should be updated last

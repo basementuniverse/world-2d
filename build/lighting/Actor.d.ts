@@ -1,4 +1,5 @@
-import { vec } from '@basementuniverse/vec';
+import type { Sprite } from '@basementuniverse/sprite';
+import { vec2 } from '@basementuniverse/vec';
 import { CircleCaster, CircleCasterOptions, SpriteCaster, SpriteCasterOptions } from './Caster';
 import type { LightingSystem } from './LightingSystem';
 import { WallReceiver, WallReceiverOptions } from './Surface';
@@ -23,25 +24,54 @@ export type ActorOptions = Omit<WallReceiverOptions, 'receiveLight'> & {
      */
     shadow?: ActorShadow;
 };
+export type SpriteActorOptions = Omit<ActorOptions, 'position' | 'size' | 'image' | 'mask' | 'normalMap' | 'specularMap'> & {
+    /**
+     * The sprite that this actor follows
+     *
+     * The actor's position, size, and images come from the sprite every time the
+     * scene is rendered. Normal maps and specular maps come from the sprite's
+     * `normal` and `specular` layers
+     */
+    sprite: Sprite;
+};
 /**
  * A moving object that receives light and casts a shadow
  */
 export declare class Actor {
     private static readonly DEFAULT_FOOTPRINT_SCALE;
     private static readonly DEFAULT_SHADOW_LENGTH_SCALE;
+    private static readonly NORMAL_LAYER;
+    private static readonly SPECULAR_LAYER;
     readonly surface: WallReceiver;
     readonly caster: SpriteCaster | CircleCaster | null;
+    readonly sprite: Sprite | null;
+    private lighting;
     private footprintHeight;
-    constructor(lighting: LightingSystem, options: ActorOptions);
+    /**
+     * Get the area covered by a sprite's current frame and the images for it
+     */
+    private static spriteFrame;
+    /**
+     * Convert sprite actor options into the equivalent actor options
+     */
+    private static resolveOptions;
+    constructor(lighting: LightingSystem, actorOptions: ActorOptions | SpriteActorOptions);
     /**
      * Get the distance that a caster's shadow reaches back towards the light
      */
     private casterBias;
     private footprint;
     /**
-     * Move this actor to a new world position
+     * Copy the current position, size, and images from this actor's sprite, this
+     * is called automatically when the scene is rendered
      */
-    moveTo(position: vec): void;
+    sync(): void;
+    /**
+     * Move this actor to a new world position
+     *
+     * If this actor has a sprite then this will set the sprite's position
+     */
+    moveTo(position: vec2): void;
     /**
      * Remove this actor from the lighting system
      */

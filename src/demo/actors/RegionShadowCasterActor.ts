@@ -1,5 +1,5 @@
 import { exclude } from '@basementuniverse/utils';
-import { vec } from '@basementuniverse/vec';
+import { vec2 } from '@basementuniverse/vec';
 import { v4 as uuid } from 'uuid';
 import { RegionCaster } from '../../lighting';
 import { LightingScene } from '../scenes/LightingScene';
@@ -11,9 +11,9 @@ export class RegionShadowCasterActor extends EditorActor {
 
   protected readonly debugColour = '#c33';
   protected readonly debugHoverColour = '#f44';
-  protected readonly minSize = vec(16, 16);
-  protected readonly maxSize = vec(256, 256);
-  protected labelOffset = vec(10, 50);
+  protected readonly minSize = vec2(16, 16);
+  protected readonly maxSize = vec2(256, 256);
+  protected labelOffset = vec2(10, 50);
 
   public includeRegionShadow: boolean = false;
 
@@ -73,8 +73,8 @@ export class RegionShadowCasterActor extends EditorActor {
       this.scene,
       {
         ...exclude(this.serialise(), 'id'),
-        position: vec.cpy(object.position),
-        size: vec.cpy(object.size),
+        position: vec2.cpy(object.position),
+        size: vec2.cpy(object.size),
       },
       object
     );

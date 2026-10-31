@@ -1,42 +1,8 @@
-import { vec } from '@basementuniverse/vec';
-
-/**
- * An image that can be drawn onto a canvas
- */
-export type LightingImage = HTMLImageElement | HTMLCanvasElement;
-
-/**
- * The parts of a camera that are used by the lighting system, this is
- * compatible with @basementuniverse/camera
- */
-export type LightingCamera = {
-  bounds: Interval2d;
-  worldToScreen(position: vec): vec;
-  setTransforms(context: CanvasRenderingContext2D): void;
-};
-
-export type Colour = {
-  r: number;
-  g: number;
-  b: number;
-  a: number;
-};
+import { vec2 } from '@basementuniverse/vec';
 
 export type Line = {
-  start: vec;
-  end: vec;
-};
-
-export type Interval1d = {
-  start: number;
-  end: number;
-};
-
-export type Interval2d = {
-  top: number;
-  bottom: number;
-  right: number;
-  left: number;
+  start: vec2;
+  end: vec2;
 };
 
 export enum Sector1d {
@@ -57,13 +23,8 @@ export enum Sector2d {
   BottomRight = 'bottom-right',
 }
 
-export type Rectangle = {
-  position: vec;
-  size: vec;
-};
-
 export type PolygonVertices = (
-  | vec
+  | vec2
   | ((context: CanvasRenderingContext2D) => void)
 )[];
 

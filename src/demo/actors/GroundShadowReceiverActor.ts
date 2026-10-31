@@ -1,5 +1,5 @@
 import ContentManager from '@basementuniverse/content-manager';
-import { vec } from '@basementuniverse/vec';
+import { vec2 } from '@basementuniverse/vec';
 import { v4 as uuid } from 'uuid';
 import { GroundReceiver, GroundReceiverOptions } from '../../lighting';
 import { LightingScene } from '../scenes/LightingScene';
@@ -11,10 +11,10 @@ export class GroundShadowReceiverActor extends EditorActor {
 
   protected readonly debugColour = '#36c';
   protected readonly debugHoverColour = '#58e';
-  protected readonly minSize = vec(16, 16);
-  protected readonly maxSize = vec(1024, 1024);
+  protected readonly minSize = vec2(16, 16);
+  protected readonly maxSize = vec2(1024, 1024);
 
-  public size: vec = vec(256, 256);
+  public size: vec2 = vec2(256, 256);
   public zIndex: number = 0;
   public colour: string = '#ddd';
   public spriteName: string = 'ground1';

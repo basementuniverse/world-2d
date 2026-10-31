@@ -1,7 +1,7 @@
-import { vec } from '@basementuniverse/vec';
+import { vec2 } from '@basementuniverse/vec';
+import { SceneImage } from '../core';
 import type { LightingSystem } from './LightingSystem';
 import { SceneObject, SceneObjectOptions } from './SceneObject';
-import { LightingImage } from './types';
 export type RegionCasterOptions = SceneObjectOptions & {
     /**
      * Should shadows include the rectangular region of this caster?
@@ -28,20 +28,20 @@ export type SpriteCasterOptions = SceneObjectOptions & {
      * The image used for this caster's shadow, it should be black with an alpha
      * channel
      */
-    shadow?: LightingImage | null;
+    shadow?: SceneImage | null;
     /**
      * If `shadow` isn't set, we'll use the silhouette of this image instead
      */
-    image?: LightingImage | null;
+    image?: SceneImage | null;
     /**
      * Where the shadow begins, as a fraction of the size of this caster, where
      * (0, 0) is the top-left corner and (1, 1) is the bottom-right corner
      */
-    anchor?: vec;
+    anchor?: vec2;
     /**
      * Offset the shadow from the anchor, as a fraction of the shadow size
      */
-    offset?: vec;
+    offset?: vec2;
     /**
      * Shadow length when the light is at the center of this caster
      */
@@ -56,24 +56,24 @@ export type SpriteCasterOptions = SceneObjectOptions & {
  * A rectangle that casts a shadow by rotating and stretching an image
  */
 export declare class SpriteCaster extends SceneObject<SpriteCasterOptions> {
-    shadow: LightingImage | null;
-    image: LightingImage | null;
-    anchor: vec;
-    offset: vec;
+    shadow: SceneImage | null;
+    image: SceneImage | null;
+    anchor: vec2;
+    offset: vec2;
     minShadowLength: number;
     maxShadowLength: number | null;
     constructor(lighting: LightingSystem, options: SpriteCasterOptions);
     /**
      * Get the image for this caster's shadow, if it has one
      */
-    getShadow(): LightingImage | null;
+    getShadow(): SceneImage | null;
 }
 export type CircleCasterOptions = SceneObjectOptions & {
     /**
      * Where the shadow is centered, as a fraction of the size of this caster,
      * where (0, 0) is the top-left corner and (1, 1) is the bottom-right corner
      */
-    anchor?: vec;
+    anchor?: vec2;
     /**
      * Distance from the anchor to the shadow when the light is at the center of
      * this caster
@@ -93,7 +93,7 @@ export type CircleCasterOptions = SceneObjectOptions & {
  * A rectangle that casts an elliptical shadow
  */
 export declare class CircleCaster extends SceneObject<CircleCasterOptions> {
-    anchor: vec;
+    anchor: vec2;
     minShadowDistance: number;
     maxShadowDistance: number | null;
     alpha: number;

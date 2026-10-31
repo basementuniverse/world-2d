@@ -1,7 +1,7 @@
 import ContentManager from '@basementuniverse/content-manager';
 import Debug from '@basementuniverse/debug';
 import { clamp, exclude } from '@basementuniverse/utils';
-import { vec } from '@basementuniverse/vec';
+import { vec2 } from '@basementuniverse/vec';
 import { v4 as uuid } from 'uuid';
 import { Light, LightOptions } from '../../lighting';
 import Game from '../Game';
@@ -18,8 +18,8 @@ export class LightActor extends EditorActor {
 
   protected readonly debugColour = '#5b3';
   protected readonly debugHoverColour = '#7e5';
-  protected readonly minSize = vec();
-  protected readonly maxSize = vec();
+  protected readonly minSize = vec2();
+  protected readonly maxSize = vec2();
 
   public radius: number = 100;
   public colour: string = 'white';
@@ -95,46 +95,51 @@ export class LightActor extends EditorActor {
     return new LightActor(scene, data);
   }
 
-  protected isHovered(mouseWorldPosition: vec): boolean {
+  protected isHovered(mouseWorldPosition: vec2): boolean {
     return (
-      vec.len(vec.sub(mouseWorldPosition, this.position)) <
+      vec2.len(vec2.sub(mouseWorldPosition, this.position)) <
       LightActor.HOVER_RADIUS
     );
   }
 
-  protected dragPosition(position: vec) {
+  protected dragPosition(position: vec2) {
     this.position.x = position.x;
     this.position.y = position.y;
   }
 
-  protected dragSize(mouseWorldPosition: vec) {
+  protected dragSize(mouseWorldPosition: vec2) {
     this.radius = clamp(
-      vec.len(vec.sub(mouseWorldPosition, this.position)),
+      vec2.len(vec2.sub(mouseWorldPosition, this.position)),
       LightActor.MIN_RADIUS,
       LightActor.MAX_RADIUS
     );
   }
 
   protected drawDebug() {
-    Debug.border(`Light ${this.id} border`, '', this.position, {
-      level: 1,
-      space: 'world',
-      showLabel: false,
-      showValue: false,
-      borderShape: 'circle',
-      radius: this.radius,
-      borderColour:
-        this.hovered || this.dragging
-          ? this.debugHoverColour
-          : this.debugColour,
-      borderStyle: this.selected ? 'solid' : 'dashed',
-    });
-    Debug.marker(`Light ${this.id}`, this.id, this.position, {
-      level: 2,
-      space: 'world',
-      showLabel: this.selected || Game.DEBUG_MODES[Game.debugMode].labels,
-      showValue: false,
-      markerImage: ContentManager.get<HTMLImageElement>('light'),
-    });
+    const { borders, lights, labels } = Game.DEBUG_MODES[Game.debugMode];
+
+    if (borders) {
+      Debug.border(`Light ${this.id} border`, '', this.position, {
+        space: 'world',
+        showLabel: false,
+        showValue: false,
+        borderShape: 'circle',
+        radius: this.radius,
+        borderColour:
+          this.hovered || this.dragging
+            ? this.debugHoverColour
+            : this.debugColour,
+        borderStyle: this.selected ? 'solid' : 'dashed',
+      });
+    }
+
+    if (lights) {
+      Debug.marker(`Light ${this.id}`, this.id, this.position, {
+        space: 'world',
+        showLabel: this.selected || labels,
+        showValue: false,
+        markerImage: ContentManager.get<HTMLImageElement>('light'),
+      });
+    }
   }
 }

@@ -1,4 +1,6 @@
-import { vec } from '@basementuniverse/vec';
+import type { Sprite } from '@basementuniverse/sprite';
+import { vec2 } from '@basementuniverse/vec';
+import { Rectangle, spriteBounds } from '../core';
 import {
   CircleCaster,
   CircleCasterOptions,
@@ -7,7 +9,6 @@ import {
 } from './Caster';
 import type { LightingSystem } from './LightingSystem';
 import { WallReceiver, WallReceiverOptions } from './Surface';
-import { Rectangle } from './types';
 
 type ActorShadowOptions = {
   /**
@@ -37,24 +38,84 @@ export type ActorOptions = Omit<WallReceiverOptions, 'receiveLight'> & {
   shadow?: ActorShadow;
 };
 
+export type SpriteActorOptions = Omit<
+  ActorOptions,
+  'position' | 'size' | 'image' | 'mask' | 'normalMap' | 'specularMap'
+> & {
+  /**
+   * The sprite that this actor follows
+   *
+   * The actor's position, size, and images come from the sprite every time the
+   * scene is rendered. Normal maps and specular maps come from the sprite's
+   * `normal` and `specular` layers
+   */
+  sprite: Sprite;
+};
+
 /**
  * A moving object that receives light and casts a shadow
  */
 export class Actor {
   private static readonly DEFAULT_FOOTPRINT_SCALE = 1 / 3;
   private static readonly DEFAULT_SHADOW_LENGTH_SCALE = 1.33;
+  private static readonly NORMAL_LAYER = 'normal';
+  private static readonly SPECULAR_LAYER = 'specular';
 
   public readonly surface: WallReceiver;
   public readonly caster: SpriteCaster | CircleCaster | null = null;
+  public readonly sprite: Sprite | null;
 
+  private lighting: LightingSystem;
   private footprintHeight: number;
 
-  public constructor(lighting: LightingSystem, options: ActorOptions) {
+  /**
+   * Get the area covered by a sprite's current frame and the images for it
+   */
+  private static spriteFrame(sprite: Sprite) {
+    const { image } = sprite;
+
+    return {
+      ...spriteBounds(sprite),
+      image,
+      normalMap: image && sprite.getImage(undefined, Actor.NORMAL_LAYER),
+      specularMap: image && sprite.getImage(undefined, Actor.SPECULAR_LAYER),
+    };
+  }
+
+  /**
+   * Convert sprite actor options into the equivalent actor options
+   */
+  private static resolveOptions(
+    options: ActorOptions | SpriteActorOptions
+  ): ActorOptions {
+    if (!('sprite' in options)) {
+      return options;
+    }
+
+    const { sprite, ...actor } = options;
+
+    return {
+      ...actor,
+      ...Actor.spriteFrame(sprite),
+      customDraw: {
+        image: context => sprite.draw(context),
+        ...actor.customDraw,
+      },
+    };
+  }
+
+  public constructor(
+    lighting: LightingSystem,
+    actorOptions: ActorOptions | SpriteActorOptions
+  ) {
+    const options = Actor.resolveOptions(actorOptions);
     const { shadow = 'sprite', ...surface } = options;
     const { type, footprintHeight, ...casterOptions } = (
       typeof shadow === 'string' ? { type: shadow } : shadow
     ) as Exclude<ActorShadow, string>;
 
+    this.lighting = lighting;
+    this.sprite = 'sprite' in actorOptions ? actorOptions.sprite : null;
     this.footprintHeight =
       footprintHeight ?? options.size.y * Actor.DEFAULT_FOOTPRINT_SCALE;
 
@@ -103,17 +164,44 @@ export class Actor {
     return Math.max(caster.size.x, caster.size.y) / 2 + 1;
   }
 
-  private footprint(position: vec, size: vec): Rectangle {
+  private footprint(position: vec2, size: vec2): Rectangle {
     return {
-      position: vec(position.x, position.y + size.y - this.footprintHeight),
-      size: vec(size.x, this.footprintHeight),
+      position: vec2(position.x, position.y + size.y - this.footprintHeight),
+      size: vec2(size.x, this.footprintHeight),
     };
   }
 
   /**
-   * Move this actor to a new world position
+   * Copy the current position, size, and images from this actor's sprite, this
+   * is called automatically when the scene is rendered
    */
-  public moveTo(position: vec) {
+  public sync() {
+    if (!this.sprite) {
+      return;
+    }
+
+    const frame = Actor.spriteFrame(this.sprite);
+
+    this.surface.set(frame);
+    this.caster?.set(this.footprint(frame.position, frame.size));
+
+    if (this.caster instanceof SpriteCaster) {
+      this.caster.image = frame.image;
+    }
+  }
+
+  /**
+   * Move this actor to a new world position
+   *
+   * If this actor has a sprite then this will set the sprite's position
+   */
+  public moveTo(position: vec2) {
+    if (this.sprite) {
+      this.sprite.position = vec2.cpy(position);
+      this.sync();
+      return;
+    }
+
     this.surface.moveTo(position);
     this.caster?.moveTo(this.footprint(position, this.surface.size).position);
   }
@@ -124,5 +212,6 @@ export class Actor {
   public remove() {
     this.surface.remove();
     this.caster?.remove();
+    this.lighting.remove(this);
   }
 }

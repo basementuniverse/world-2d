@@ -5,7 +5,7 @@ module.exports = {
   mode: process.env.NODE_ENV || 'development',
   entry: {
     index: {
-      import: './src/lighting/index.ts',
+      import: './src/index.ts',
       library: {
         name: 'Lighting2D',
         type: 'umd',

@@ -1,4 +1,4 @@
-import { vec } from '@basementuniverse/vec';
+import { vec2 } from '@basementuniverse/vec';
 import { Actor } from './Actor';
 
 export class ProgressBar implements Actor {
@@ -10,7 +10,7 @@ export class ProgressBar implements Actor {
 
   private displayProgress: number = 0;
 
-  public constructor(public position: vec, public size: vec) {}
+  public constructor(public position: vec2, public size: vec2) {}
 
   public update(dt: number) {
     this.displayProgress +=
@@ -28,7 +28,7 @@ export class ProgressBar implements Actor {
     context.fillStyle = ProgressBar.COLOUR;
     context.lineWidth = 2;
 
-    const topLeft = vec.sub(this.position, vec.mul(this.size, 1 / 2));
+    const topLeft = vec2.sub(this.position, vec2.mul(this.size, 1 / 2));
 
     context.strokeRect(topLeft.x, topLeft.y, this.size.x, this.size.y);
     context.fillRect(

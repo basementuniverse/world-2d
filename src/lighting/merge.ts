@@ -1,5 +1,5 @@
-import { Rectangle, Side } from './types';
-import { rectangleToInterval } from './utilities';
+import { Rectangle, rectangleToInterval } from '../core';
+import { Side } from './types';
 
 const MERGE_MAX_ITERATIONS = 100;
 const MERGE_ORDER = ['duplicate', Side.Bottom, Side.Right, Side.Top, Side.Left];

@@ -1,4 +1,4 @@
-import { vec } from '@basementuniverse/vec';
+import { vec2 } from '@basementuniverse/vec';
 import { v4 as uuid } from 'uuid';
 import { CircleCaster, CircleCasterOptions } from '../../lighting';
 import { LightingScene } from '../scenes/LightingScene';
@@ -10,10 +10,10 @@ export class CircleShadowCasterActor extends EditorActor {
 
   protected readonly debugColour = '#c33';
   protected readonly debugHoverColour = '#f44';
-  protected readonly minSize = vec(16, 16);
-  protected readonly maxSize = vec(256, 256);
+  protected readonly minSize = vec2(16, 16);
+  protected readonly maxSize = vec2(256, 256);
 
-  public anchor: vec = vec(0.5, 0.9);
+  public anchor: vec2 = vec2(0.5, 0.9);
   public minShadowDistance: number = 5;
   public maxShadowDistance: number | null = 20;
   public alpha: number = 1;

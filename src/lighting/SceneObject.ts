@@ -1,16 +1,16 @@
-import { vec } from '@basementuniverse/vec';
+import { vec2 } from '@basementuniverse/vec';
 import type { LightingSystem } from './LightingSystem';
 
 export type SceneObjectOptions = {
   /**
    * World position of the top-left corner of this object
    */
-  position: vec;
+  position: vec2;
 
   /**
    * Size of this object in world units
    */
-  size: vec;
+  size: vec2;
 
   /**
    * Can this object be merged with its neighbours by
@@ -28,28 +28,30 @@ export type SceneObjectOptions = {
 export abstract class SceneObject<Options extends SceneObjectOptions> {
   protected lighting: LightingSystem;
 
-  public position: vec;
-  public size: vec;
+  public position: vec2;
+  public size: vec2;
   public mergeable: boolean = true;
+
+  private removeCallbacks: (() => void)[] = [];
 
   public constructor(lighting: LightingSystem, options: Options) {
     this.lighting = lighting;
-    this.position = vec.cpy(options.position);
-    this.size = vec.cpy(options.size);
+    this.position = vec2.cpy(options.position);
+    this.size = vec2.cpy(options.size);
   }
 
   /**
    * Move this object to a new world position
    */
-  public moveTo(position: vec) {
-    this.position = vec.cpy(position);
+  public moveTo(position: vec2) {
+    this.position = vec2.cpy(position);
   }
 
   /**
    * Change the size of this object
    */
-  public resize(size: vec) {
-    this.size = vec.cpy(size);
+  public resize(size: vec2) {
+    this.size = vec2.cpy(size);
   }
 
   /**
@@ -62,8 +64,15 @@ export abstract class SceneObject<Options extends SceneObjectOptions> {
       }
     }
 
-    this.position = vec.cpy(this.position);
-    this.size = vec.cpy(this.size);
+    this.position = vec2.cpy(this.position);
+    this.size = vec2.cpy(this.size);
+  }
+
+  /**
+   * Add a function to be called when this object is removed
+   */
+  public onRemove(callback: () => void) {
+    this.removeCallbacks.push(callback);
   }
 
   /**
@@ -71,5 +80,6 @@ export abstract class SceneObject<Options extends SceneObjectOptions> {
    */
   public remove() {
     this.lighting.remove(this);
+    this.removeCallbacks.forEach(callback => callback());
   }
 }

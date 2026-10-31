@@ -1,6 +1,6 @@
 import ContentManager from '@basementuniverse/content-manager';
 import { exclude } from '@basementuniverse/utils';
-import { vec } from '@basementuniverse/vec';
+import { vec2 } from '@basementuniverse/vec';
 import { v4 as uuid } from 'uuid';
 import { WallReceiver, WallReceiverOptions } from '../../lighting';
 import { LightingScene } from '../scenes/LightingScene';
@@ -14,14 +14,14 @@ export class WallShadowReceiverActor extends EditorActor {
 
   protected readonly debugColour = '#f83';
   protected readonly debugHoverColour = '#fb4';
-  protected readonly minSize = vec(16, 16);
-  protected readonly maxSize = vec(256, 256);
-  protected labelOffset = vec(10, 30);
+  protected readonly minSize = vec2(16, 16);
+  protected readonly maxSize = vec2(256, 256);
+  protected labelOffset = vec2(10, 30);
 
   public zIndex: number = 0;
   public colour: string = '#ddd';
   public receiveLight: boolean = true;
-  public surfaceNormal: vec = vec();
+  public surfaceNormal: vec2 = vec2();
   public spriteName: string = 'wall1';
   public maskName: string = 'wall1-mask';
   public normalMapName: string = 'wall1-normal';
@@ -133,8 +133,8 @@ export class WallShadowReceiverActor extends EditorActor {
       this.scene,
       {
         ...exclude(this.serialise(), 'id'),
-        position: vec.cpy(object.position),
-        size: vec.cpy(object.size),
+        position: vec2.cpy(object.position),
+        size: vec2.cpy(object.size),
       },
       object
     );

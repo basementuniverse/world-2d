@@ -3,8 +3,9 @@ import Debug from '@basementuniverse/debug';
 import InputManager from '@basementuniverse/input-manager';
 import { Scene } from '@basementuniverse/scene-manager';
 import { exclude } from '@basementuniverse/utils';
-import { vec } from '@basementuniverse/vec';
+import { vec2 } from '@basementuniverse/vec';
 import { LightingSystem, WallReceiver } from '../../lighting';
+import { World } from '../../world';
 import { CircleShadowCasterActor } from '../actors/CircleShadowCasterActor';
 import { GroundShadowReceiverActor } from '../actors/GroundShadowReceiverActor';
 import { LightActor } from '../actors/LightActor';
@@ -29,10 +30,11 @@ enum LightingSceneRenderMode {
 
 export class LightingScene extends Scene {
   private static readonly CAMERA_SPEED: number = 100;
-  private static readonly CAMERA_INITIAL_POSITION: vec = vec(1000, 600);
+  private static readonly CAMERA_INITIAL_POSITION: vec2 = vec2(1000, 600);
 
   public camera: Camera;
   public lightingSystem: LightingSystem;
+  public world: World;
 
   private groundShadowReceivers: GroundShadowReceiverActor[] = [];
   private wallShadowReceivers: WallShadowReceiverActor[] = [];
@@ -55,7 +57,7 @@ export class LightingScene extends Scene {
 
   public initialise() {
     // Camera
-    this.camera = new Camera(vec(), {
+    this.camera = new Camera(vec2(), {
       minScale: 0.5,
       maxScale: 5,
       moveEaseAmount: 0.95,
@@ -69,6 +71,7 @@ export class LightingScene extends Scene {
       softShadowsEnabled: true,
       softShadowsAmount: 2.5,
     });
+    this.world = new World({ lighting: this.lightingSystem });
 
     // GUI controls
     Game.gui
@@ -386,12 +389,12 @@ export class LightingScene extends Scene {
 
     Debug.value(
       'Mouse world position',
-      vec.str(vec.map(mouseWorldPosition, v => v.toFixed(2)))
+      vec2.str(vec2.map(mouseWorldPosition, v => +v.toFixed(2)))
     );
     Debug.value(
       'Camera',
-      `pos ${vec.str(
-        vec.map(this.camera.position, v => v.toFixed(2))
+      `pos ${vec2.str(
+        vec2.map(this.camera.position, v => +v.toFixed(2))
       )} scale ${this.camera.scale.toFixed(2)}`
     );
     Debug.value(
@@ -419,7 +422,7 @@ export class LightingScene extends Scene {
     }
 
     // Handle camera move
-    const cameraMoveVector = vec();
+    const cameraMoveVector = vec2();
     if (InputManager.keyDown('ArrowUp')) {
       cameraMoveVector.y--;
     }
@@ -433,9 +436,9 @@ export class LightingScene extends Scene {
       cameraMoveVector.x++;
     }
 
-    this.camera.position = vec.add(
+    this.camera.position = vec2.add(
       this.camera.position,
-      vec.mul(cameraMoveVector, LightingScene.CAMERA_SPEED * dt)
+      vec2.mul(cameraMoveVector, LightingScene.CAMERA_SPEED * dt)
     );
 
     // Handle camera zoom
@@ -523,7 +526,7 @@ export class LightingScene extends Scene {
       if (InputManager.keyPressed('KeyG')) {
         this.groundShadowReceivers.push(
           new GroundShadowReceiverActor(this, {
-            position: vec.cpy(mouseWorldPosition),
+            position: vec2.cpy(mouseWorldPosition),
           })
         );
       }
@@ -532,7 +535,7 @@ export class LightingScene extends Scene {
       if (InputManager.keyPressed('KeyW')) {
         this.wallShadowReceivers.push(
           new WallShadowReceiverActor(this, {
-            position: vec.cpy(mouseWorldPosition),
+            position: vec2.cpy(mouseWorldPosition),
           })
         );
       }
@@ -541,7 +544,7 @@ export class LightingScene extends Scene {
       if (InputManager.keyPressed('KeyR')) {
         this.regionShadowCasters.push(
           new RegionShadowCasterActor(this, {
-            position: vec.cpy(mouseWorldPosition),
+            position: vec2.cpy(mouseWorldPosition),
           })
         );
       }
@@ -550,7 +553,7 @@ export class LightingScene extends Scene {
       if (InputManager.keyPressed('KeyS')) {
         this.spriteShadowCasters.push(
           new SpriteShadowCasterActor(this, {
-            position: vec.cpy(mouseWorldPosition),
+            position: vec2.cpy(mouseWorldPosition),
           })
         );
       }
@@ -559,7 +562,7 @@ export class LightingScene extends Scene {
       if (InputManager.keyPressed('KeyC')) {
         this.circleShadowCasters.push(
           new CircleShadowCasterActor(this, {
-            position: vec.cpy(mouseWorldPosition),
+            position: vec2.cpy(mouseWorldPosition),
           })
         );
       }
@@ -568,7 +571,7 @@ export class LightingScene extends Scene {
       if (InputManager.keyPressed('KeyL')) {
         this.lights.push(
           new LightActor(this, {
-            position: vec.cpy(mouseWorldPosition),
+            position: vec2.cpy(mouseWorldPosition),
           })
         );
       }
@@ -585,8 +588,8 @@ export class LightingScene extends Scene {
           this.groundShadowReceivers.push(
             GroundShadowReceiverActor.deserialise(this, {
               ...exclude(this.selected.serialise(), 'id', 'position', 'size'),
-              position: vec.cpy(mouseWorldPosition),
-              size: vec.cpy(this.selected.size),
+              position: vec2.cpy(mouseWorldPosition),
+              size: vec2.cpy(this.selected.size),
             })
           );
           break;
@@ -595,8 +598,8 @@ export class LightingScene extends Scene {
           this.wallShadowReceivers.push(
             WallShadowReceiverActor.deserialise(this, {
               ...exclude(this.selected.serialise(), 'id', 'position', 'size'),
-              position: vec.cpy(mouseWorldPosition),
-              size: vec.cpy(this.selected.size),
+              position: vec2.cpy(mouseWorldPosition),
+              size: vec2.cpy(this.selected.size),
             })
           );
           break;
@@ -605,8 +608,8 @@ export class LightingScene extends Scene {
           this.regionShadowCasters.push(
             RegionShadowCasterActor.deserialise(this, {
               ...exclude(this.selected.serialise(), 'id', 'position', 'size'),
-              position: vec.cpy(mouseWorldPosition),
-              size: vec.cpy(this.selected.size),
+              position: vec2.cpy(mouseWorldPosition),
+              size: vec2.cpy(this.selected.size),
             })
           );
           break;
@@ -615,8 +618,8 @@ export class LightingScene extends Scene {
           this.spriteShadowCasters.push(
             SpriteShadowCasterActor.deserialise(this, {
               ...exclude(this.selected.serialise(), 'id', 'position', 'size'),
-              position: vec.cpy(mouseWorldPosition),
-              size: vec.cpy(this.selected.size),
+              position: vec2.cpy(mouseWorldPosition),
+              size: vec2.cpy(this.selected.size),
             })
           );
           break;
@@ -625,8 +628,8 @@ export class LightingScene extends Scene {
           this.circleShadowCasters.push(
             CircleShadowCasterActor.deserialise(this, {
               ...exclude(this.selected.serialise(), 'id', 'position', 'size'),
-              position: vec.cpy(mouseWorldPosition),
-              size: vec.cpy(this.selected.size),
+              position: vec2.cpy(mouseWorldPosition),
+              size: vec2.cpy(this.selected.size),
             })
           );
           break;
@@ -635,7 +638,7 @@ export class LightingScene extends Scene {
           this.lights.push(
             LightActor.deserialise(this, {
               ...exclude(this.selected.serialise(), 'id', 'position'),
-              position: vec.cpy(mouseWorldPosition),
+              position: vec2.cpy(mouseWorldPosition),
             })
           );
           break;
@@ -735,7 +738,7 @@ export class LightingScene extends Scene {
         break;
 
       case LightingSceneRenderMode.Normal:
-        lighting.render(context, this.camera);
+        this.world.render(context, this.camera);
         break;
 
       case LightingSceneRenderMode.SurfaceMap:
@@ -779,7 +782,7 @@ export class LightingScene extends Scene {
 
     context.save();
     this.camera.setTransforms(context);
-    Debug.draw(context, Game.DEBUG_MODES[Game.debugMode].debugLevel);
+    Debug.draw(context);
     context.restore();
   }
 }
