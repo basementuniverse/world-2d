@@ -1,8 +1,8 @@
-import ContentManager from '@basementuniverse/content-manager';
 import { vec2 } from '@basementuniverse/vec';
 import { v4 as uuid } from 'uuid';
 import { SpriteCaster, SpriteCasterOptions } from '../../lighting';
-import { LightingScene } from '../scenes/LightingScene';
+import { addImage, getImage } from '../gui';
+import { EditorScene } from '../scenes/EditorScene';
 import { EditorActor } from './EditorActor';
 
 export class SpriteShadowCasterActor extends EditorActor {
@@ -21,7 +21,7 @@ export class SpriteShadowCasterActor extends EditorActor {
   public maxShadowLength: number | null = 64;
 
   public constructor(
-    scene: LightingScene,
+    scene: EditorScene,
     data: Partial<SpriteShadowCasterActor> = {}
   ) {
     super(scene);
@@ -31,22 +31,25 @@ export class SpriteShadowCasterActor extends EditorActor {
     });
 
     this.object = scene.lightingSystem.addSpriteCaster(this.objectOptions());
+  }
 
-    this.folder = this.createFolder();
-    this.folder.add(this, 'shadowName');
-    this.folder.add(this.anchor, 'x', 0, 1, 0.01).name('anchor x');
-    this.folder.add(this.anchor, 'y', 0, 1, 0.01).name('anchor y');
-    this.folder.add(this.offset, 'x', 0, 1, 0.01).name('offset x');
-    this.folder.add(this.offset, 'y', 0, 1, 0.01).name('offset y');
-    this.folder.add(this, 'minShadowLength');
-    this.folder.add(this, 'maxShadowLength');
+  public createControls(folder: dat.GUI) {
+    super.createControls(folder);
+
+    addImage(folder, this, 'shadowName');
+    folder.add(this.anchor, 'x', 0, 1, 0.01).name('anchor x');
+    folder.add(this.anchor, 'y', 0, 1, 0.01).name('anchor y');
+    folder.add(this.offset, 'x', 0, 1, 0.01).name('offset x');
+    folder.add(this.offset, 'y', 0, 1, 0.01).name('offset y');
+    folder.add(this, 'minShadowLength');
+    folder.add(this, 'maxShadowLength');
   }
 
   private objectOptions(): SpriteCasterOptions {
     return {
       position: this.position,
       size: this.size,
-      shadow: ContentManager.get<HTMLImageElement>(this.shadowName) ?? null,
+      shadow: getImage(this.shadowName),
       anchor: this.anchor,
       offset: this.offset,
       minShadowLength: this.minShadowLength,
@@ -73,7 +76,7 @@ export class SpriteShadowCasterActor extends EditorActor {
   }
 
   public static deserialise(
-    scene: LightingScene,
+    scene: EditorScene,
     data: any
   ): SpriteShadowCasterActor {
     return new SpriteShadowCasterActor(scene, data);

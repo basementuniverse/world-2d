@@ -1,10 +1,11 @@
-import ContentManager from '@basementuniverse/content-manager';
 import { exclude } from '@basementuniverse/utils';
 import { vec2 } from '@basementuniverse/vec';
 import { v4 as uuid } from 'uuid';
 import { WallReceiver, WallReceiverOptions } from '../../lighting';
-import { LightingScene } from '../scenes/LightingScene';
+import { addColour, addImage, getImage } from '../gui';
+import { EditorScene } from '../scenes/EditorScene';
 import { EditorActor } from './EditorActor';
+import { Mirror } from './Mirror';
 
 const LEGACY_ACTOR_SHADOW_BIAS = 12;
 
@@ -18,7 +19,6 @@ export class WallShadowReceiverActor extends EditorActor {
   protected readonly maxSize = vec2(256, 256);
   protected labelOffset = vec2(10, 30);
 
-  public zIndex: number = 0;
   public colour: string = '#ddd';
   public receiveLight: boolean = true;
   public surfaceNormal: vec2 = vec2();
@@ -29,9 +29,10 @@ export class WallShadowReceiverActor extends EditorActor {
   public spriteRepeat: boolean = false;
   public shadowBias: number = 1;
   public projectShadows: boolean = true;
+  public mirror: Mirror;
 
   public constructor(
-    scene: LightingScene,
+    scene: EditorScene,
     data: Partial<WallShadowReceiverActor> = {},
     object?: WallReceiver
   ) {
@@ -40,29 +41,31 @@ export class WallShadowReceiverActor extends EditorActor {
     Object.assign(this, data, {
       id: data.id ?? uuid().split('-')[0],
     });
+    this.mirror = new Mirror(data.mirror);
 
     this.object =
       object ?? scene.lightingSystem.addWallReceiver(this.objectOptions());
+  }
 
-    this.folder = this.createFolder();
-    this.folder.add(this, 'zIndex');
-    this.folder.add(this, 'colour');
-    this.folder.add(this, 'receiveLight');
-    this.folder
-      .add(this.surfaceNormal, 'x', -1, 1, 0.01)
-      .name('surfaceNormal x')
-      .listen();
-    this.folder
-      .add(this.surfaceNormal, 'y', -1, 1, 0.01)
-      .name('surfaceNormal y')
-      .listen();
-    this.folder.add(this, 'spriteName');
-    this.folder.add(this, 'maskName');
-    this.folder.add(this, 'normalMapName');
-    this.folder.add(this, 'specularMapName');
-    this.folder.add(this, 'spriteRepeat');
-    this.folder.add(this, 'shadowBias', 0, 32, 1);
-    this.folder.add(this, 'projectShadows');
+  public createControls(folder: dat.GUI) {
+    super.createControls(folder);
+
+    folder.add(this, 'zIndex');
+    addColour(folder, this, 'colour');
+    folder.add(this, 'receiveLight');
+    folder.add(this.surfaceNormal, 'x', -1, 1, 0.01).name('surfaceNormal x');
+    folder.add(this.surfaceNormal, 'y', -1, 1, 0.01).name('surfaceNormal y');
+    addImage(folder, this, 'spriteName');
+    addImage(folder, this, 'maskName', '-mask');
+    addImage(folder, this, 'normalMapName', '-normal');
+    addImage(folder, this, 'specularMapName', '-specular');
+    folder.add(this, 'spriteRepeat');
+    folder.add(this, 'shadowBias', 0, 32, 1);
+    folder.add(this, 'projectShadows');
+
+    const mirror = folder.addFolder('Mirror');
+    this.mirror.createControls(mirror);
+    mirror.open();
   }
 
   private objectOptions(): WallReceiverOptions {
@@ -73,12 +76,10 @@ export class WallShadowReceiverActor extends EditorActor {
       colour: this.colour,
       receiveLight: this.receiveLight,
       surfaceNormal: this.surfaceNormal,
-      image: ContentManager.get<HTMLImageElement>(this.spriteName) ?? null,
-      mask: ContentManager.get<HTMLImageElement>(this.maskName) ?? null,
-      normalMap:
-        ContentManager.get<HTMLImageElement>(this.normalMapName) ?? null,
-      specularMap:
-        ContentManager.get<HTMLImageElement>(this.specularMapName) ?? null,
+      image: getImage(this.spriteName),
+      mask: getImage(this.maskName),
+      normalMap: getImage(this.normalMapName),
+      specularMap: getImage(this.specularMapName),
       repeat: this.spriteRepeat,
       shadowBias: this.shadowBias,
       projectShadows: this.projectShadows,
@@ -87,6 +88,7 @@ export class WallShadowReceiverActor extends EditorActor {
 
   protected sync() {
     this.object.set(this.objectOptions());
+    this.mirror.sync(this.scene, this.object);
   }
 
   public serialise(): any {
@@ -106,11 +108,12 @@ export class WallShadowReceiverActor extends EditorActor {
       spriteRepeat: this.spriteRepeat,
       shadowBias: this.shadowBias,
       projectShadows: this.projectShadows,
+      mirror: this.mirror.serialise(),
     };
   }
 
   public static deserialise(
-    scene: LightingScene,
+    scene: EditorScene,
     data: any
   ): WallShadowReceiverActor {
     // Older scenes put anything that casts a shadow in a second wall layer

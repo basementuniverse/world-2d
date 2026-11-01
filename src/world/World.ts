@@ -314,6 +314,7 @@ export class World {
       },
     });
 
+    region.onMove(position => surface.moveTo(position));
     region.onRemove(() => surface.remove());
 
     return region;

@@ -2,7 +2,7 @@ import { exclude } from '@basementuniverse/utils';
 import { vec2 } from '@basementuniverse/vec';
 import { v4 as uuid } from 'uuid';
 import { RegionCaster } from '../../lighting';
-import { LightingScene } from '../scenes/LightingScene';
+import { EditorScene } from '../scenes/EditorScene';
 import { EditorActor } from './EditorActor';
 
 export class RegionShadowCasterActor extends EditorActor {
@@ -18,7 +18,7 @@ export class RegionShadowCasterActor extends EditorActor {
   public includeRegionShadow: boolean = false;
 
   public constructor(
-    scene: LightingScene,
+    scene: EditorScene,
     data: Partial<RegionShadowCasterActor> = {},
     object?: RegionCaster
   ) {
@@ -35,9 +35,12 @@ export class RegionShadowCasterActor extends EditorActor {
         size: this.size,
         includeRegionShadow: this.includeRegionShadow,
       });
+  }
 
-    this.folder = this.createFolder();
-    this.folder.add(this, 'includeRegionShadow');
+  public createControls(folder: dat.GUI) {
+    super.createControls(folder);
+
+    folder.add(this, 'includeRegionShadow');
   }
 
   protected sync() {
@@ -59,7 +62,7 @@ export class RegionShadowCasterActor extends EditorActor {
   }
 
   public static deserialise(
-    scene: LightingScene,
+    scene: EditorScene,
     data: any
   ): RegionShadowCasterActor {
     return new RegionShadowCasterActor(scene, data);

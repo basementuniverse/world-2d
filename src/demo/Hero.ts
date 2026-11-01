@@ -10,11 +10,11 @@ const DIRECTIONS: Record<string, { row: number; movement: vec2 }> = {
   north: { row: 6, movement: vec2(0, -1) },
 };
 
-const INPUT_KEYS: Record<string, string[]> = {
-  east: ['ArrowRight', 'KeyD'],
-  south: ['ArrowDown', 'KeyS'],
-  west: ['ArrowLeft', 'KeyA'],
-  north: ['ArrowUp', 'KeyW'],
+const INPUT_KEYS: Record<string, string> = {
+  east: 'KeyD',
+  south: 'KeyS',
+  west: 'KeyA',
+  north: 'KeyW',
 };
 
 /**
@@ -90,25 +90,21 @@ export class Hero {
   }
 
   /**
-   * Move the character, keeping it inside an area
+   * Move the character if it's allowed to move and a key is held down
    */
-  public update(dt: number, min: vec2, max: vec2) {
-    const pressed = Object.keys(DIRECTIONS).filter(direction =>
-      INPUT_KEYS[direction].some(key => InputManager.keyDown(key))
+  public update(dt: number, canMove: boolean = true) {
+    const pressed = Object.keys(DIRECTIONS).filter(
+      direction => canMove && InputManager.keyDown(INPUT_KEYS[direction])
     );
 
     if (pressed.length > 0) {
       const movement = pressed
         .map(direction => DIRECTIONS[direction].movement)
         .reduce(vec2.add, vec2());
-      const position = vec2.add(
+
+      this.sprite.position = vec2.add(
         this.sprite.position,
         vec2.mul(vec2.nor(movement), Hero.SPEED * dt)
-      );
-
-      this.sprite.position = vec2(
-        Math.min(Math.max(position.x, min.x), max.x),
-        Math.min(Math.max(position.y, min.y), max.y)
       );
       this.sprite.direction = pressed[pressed.length - 1];
       this.sprite.animation = 'walk';

@@ -36,9 +36,44 @@ npm run start
 
 5. Open your browser and navigate to `http://localhost:8080`
 
-6. To view the sample scene (the one in the preview image), click "Import scene from a file" (in the menu, top-right) and choose `samples/sample-scene-1.json`
+6. To view the sample scene (the one in the preview image), open the "Scene" folder (in the menu, top-right) and click "Sample: town". There are samples for reflections and water too
 
-"Export scene to a file" downloads the current scene as a JSON file, which can be imported in the same way.
+## Using the editor
+
+The demo is a small editor for trying out lights, reflections, and water. It isn't intended to be a complete world editor, but you can use it to build simple scenes.
+
+Use the "Add" folder to create something, or hold shift and press a key to create it at the mouse position:
+
+| Element | Key | Description |
+| --- | --- | --- |
+| Light | `SHIFT-L` | A light |
+| Character | | A character that you can walk around with WASD, which is useful for seeing how reflections and water react to something moving |
+| Prop | `SHIFT-P` | An object that stands on the ground, it can appear in reflections and stand in water |
+| Wall | `SHIFT-W` | A solid wall, the front can be turned into a mirror |
+| Wall surface | `SHIFT-F` | A flat surface that receives light and wall shadows, the same as `addWallReceiver()`. This can also be a mirror |
+| Region shadow caster | `SHIFT-R` | The same as `addRegionCaster()` |
+| Sprite shadow caster | `SHIFT-S` | The same as `addSpriteCaster()` |
+| Circle shadow caster | `SHIFT-C` | The same as `addCircleCaster()` |
+| Water | `SHIFT-A` | An area of water |
+| Ground | `SHIFT-G` | An area of ground, this can be reflective |
+
+Click on something to select it, its settings will appear in the menu. If several things overlap, click again to select the next one underneath.
+
+| Control | Action |
+| --- | --- |
+| Drag | Move the selected element |
+| `CTRL`-drag | Resize the selected element |
+| Hold `SHIFT` while dragging | Snap to the grid |
+| `SHIFT-D` | Duplicate the selected element at the mouse position |
+| `DELETE` or `BACKSPACE` | Delete the selected element |
+| Right click | Make a splash in the water |
+| Arrow keys | Move the camera |
+| `SHIFT`-mouse wheel | Zoom the camera |
+| WASD | Move characters |
+
+The "Lighting", "Reflections", and "Water" folders have settings for the whole scene. The strengths in the "Reflections" folder are multiplied by the strength of each reflection, so they can be used to compare a scene with and without reflections.
+
+"Export scene to a file" downloads the current scene as a JSON file, and "Import scene from a file" loads it again. Scenes that were exported from older versions can still be imported.
 
 ## Project structure
 
@@ -51,8 +86,6 @@ npm run start
 * `src/demo` is the editor shown in the preview, it builds to `build/game.js` and is a good example of how to use the library
 
 Run `npm run build` to build both.
-
-The demo has 2 more scenes, open `index.html?scene=reflections` or `index.html?scene=water`. Use the arrow keys or WASD to move around, and click on the water to make a splash.
 
 ## How to integrate it into your game
 
@@ -465,7 +498,9 @@ The `LightingSystem` creates its own WebGL context, or you can pass a `GlContext
 
 ### Changing and removing things
 
-Everything that's returned from an `add...()` method has `moveTo()` and `remove()`. Calling `moveTo()` on an actor that follows a sprite will set the sprite's position. Surfaces and casters also have `resize()` and `set()`, for example `surface.set({ colour: 'red' })`.
+Everything that's returned from an `add...()` method has `moveTo()` and `remove()`, except for reflection receivers and sources which are moved by setting their `position`. Calling `moveTo()` on an actor that follows a sprite will set the sprite's position. Surfaces and casters also have `resize()` and `set()`, for example `surface.set({ colour: 'red' })`.
+
+The size of a water region can't be changed, because its ripple simulation is created with the region. Remove the region and add a new one instead.
 
 An `Actor` or `Wall` is made from several smaller objects, which are available as `actor.surface` and `actor.caster`, or `wall.front`, `wall.top`, and `wall.caster`.
 

@@ -1,83 +1,100 @@
 import Debug from '@basementuniverse/debug';
 import InputManager from '@basementuniverse/input-manager';
 import { vec2 } from '@basementuniverse/vec';
+import { Rectangle } from '../../core';
 import { Actor } from '../Actor';
 import * as constants from '../constants';
 import Game from '../Game';
-import type { LightingScene } from '../scenes/LightingScene';
+import type { EditorScene } from '../scenes/EditorScene';
 import { clampVec, pointInRectangle, quantizeVec } from '../utilities';
 
 /**
  * An object in the demo scene that can be selected, dragged, and edited
  *
- * Each of these wraps something that has been added to the lighting system
+ * Each of these wraps something that has been added to the world
  */
 export abstract class EditorActor implements Actor {
   public abstract readonly type: string;
-  public abstract readonly object: { remove(): void };
+  public abstract object: { remove(): void };
 
   protected abstract readonly debugColour: string;
   protected abstract readonly debugHoverColour: string;
   protected abstract readonly minSize: vec2;
   protected abstract readonly maxSize: vec2;
+  protected readonly sizeNames: [string, string] = ['width', 'height'];
   protected labelOffset: vec2 = vec2();
 
-  protected scene: LightingScene;
+  protected scene: EditorScene;
   public id: string = '';
-  public folder: dat.GUI | null = null;
 
   public position: vec2 = vec2();
   public size: vec2 = vec2(64, 64);
+  public zIndex: number = 0;
 
   public hovered = false;
   public selected = false;
   protected dragging = false;
   private dragOffset: vec2 | null = null;
 
-  public constructor(scene: LightingScene) {
+  private changeKeys = new Map<string, string>();
+
+  public constructor(scene: EditorScene) {
     this.scene = scene;
   }
 
-  /**
-   * Create a GUI folder with controls for position and size
-   */
-  protected createFolder(): dat.GUI {
-    const folder = Game.gui.addFolder(`${this.type} ${this.id}`);
-    folder.add(this.position, 'x').listen();
-    folder.add(this.position, 'y').listen();
-    folder
-      .add(this.size, 'x', this.minSize.x, this.maxSize.x)
-      .name('width')
-      .listen();
-    folder
-      .add(this.size, 'y', this.minSize.y, this.maxSize.y)
-      .name('height')
-      .listen();
+  public get label(): string {
+    return `${this.type} ${this.id}`;
+  }
 
-    return folder;
+  /**
+   * The area that this actor covers in the scene
+   */
+  public get bounds(): Rectangle {
+    return { position: this.position, size: this.size };
+  }
+
+  /**
+   * Add controls for this actor to a GUI folder, this is called when the actor
+   * is selected
+   */
+  public createControls(folder: dat.GUI) {
+    folder.add(this.position, 'x').step(1);
+    folder.add(this.position, 'y').step(1);
+    folder
+      .add(this.size, 'x', this.minSize.x, this.maxSize.x, 1)
+      .name(this.sizeNames[0]);
+    folder
+      .add(this.size, 'y', this.minSize.y, this.maxSize.y, 1)
+      .name(this.sizeNames[1]);
   }
 
   public abstract serialise(): any;
 
   /**
-   * Copy the current values from this actor to the lighting system
+   * Copy the current values from this actor to the world
    */
   protected abstract sync(): void;
 
-  public destroy() {
-    if (this.folder) {
-      Game.gui.removeFolder(this.folder);
-      this.folder = null;
-    }
+  /**
+   * Some things can't be changed after they've been created, so they have to be
+   * created again. This calls `change` if `value` isn't the same as it was the
+   * last time this was called with the same name, and the first time
+   */
+  protected whenChanged(name: string, value: unknown, change: () => void) {
+    const key = JSON.stringify(value);
 
+    if (this.changeKeys.get(name) !== key) {
+      this.changeKeys.set(name, key);
+      change();
+    }
+  }
+
+  public destroy() {
     this.object.remove();
   }
 
   protected isHovered(mouseWorldPosition: vec2): boolean {
-    return pointInRectangle(mouseWorldPosition, {
-      position: this.position,
-      size: this.size,
-    });
+    return pointInRectangle(mouseWorldPosition, this.bounds);
   }
 
   protected dragPosition(position: vec2) {
@@ -101,18 +118,19 @@ export abstract class EditorActor implements Actor {
   }
 
   public update(dt: number) {
+    const mouseDown = InputManager.mouseDown(InputManager.MouseButton.Left);
     const mouseWorldPosition = this.scene.camera.screenToWorld(
       InputManager.mousePosition
     );
 
     this.hovered = this.isHovered(mouseWorldPosition);
 
-    if (InputManager.mouseDown() && this.selected && !this.dragging) {
+    if (mouseDown && this.selected && !this.dragging) {
       this.dragging = true;
       this.dragOffset = vec2.sub(mouseWorldPosition, this.position);
     }
 
-    if (!InputManager.mouseDown()) {
+    if (!mouseDown) {
       this.dragging = false;
       this.dragOffset = null;
     }
@@ -134,12 +152,14 @@ export abstract class EditorActor implements Actor {
       return;
     }
 
-    Debug.border(`${this.type} ${this.id}`, '', this.position, {
+    const { position, size } = this.bounds;
+
+    Debug.border(this.label, '', position, {
       space: 'world',
       showLabel: this.selected || Game.DEBUG_MODES[Game.debugMode].labels,
       showValue: false,
       labelOffset: this.labelOffset,
-      size: this.size,
+      size,
       borderColour:
         this.hovered || this.dragging
           ? this.debugHoverColour

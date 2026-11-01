@@ -186,6 +186,7 @@ export declare class WaterRegion {
     private depthGrid;
     private shape;
     private rainTime;
+    private moveCallbacks;
     private removeCallbacks;
     constructor(system: WaterSystem, options: WaterRegionOptions);
     /**
@@ -222,6 +223,14 @@ export declare class WaterRegion {
     disturb(position: vec2, options?: RippleOptions): void;
     update(dt: number): void;
     private updateRain;
+    /**
+     * Move this region to a new world position
+     */
+    moveTo(position: vec2): void;
+    /**
+     * Add a function to be called when this region is moved
+     */
+    onMove(callback: (position: vec2) => void): void;
     /**
      * Add a function to be called when this region is removed
      */

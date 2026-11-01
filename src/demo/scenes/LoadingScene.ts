@@ -9,9 +9,7 @@ import content from '../../../content/content.json';
 import * as constants from '../constants';
 import Game from '../Game';
 import { ProgressBar } from '../ProgressBar';
-import { LightingScene } from './LightingScene';
-import { ReflectionScene } from './ReflectionScene';
-import { WaterScene } from './WaterScene';
+import { EditorScene } from './EditorScene';
 
 export default class LoadingScene extends Scene {
   private static readonly TRANSITION_TIME: number = 0.5;
@@ -58,20 +56,7 @@ export default class LoadingScene extends Scene {
 
     if (this.cooldownTime <= 0) {
       SceneManager.pop();
-      SceneManager.push(this.createFirstScene());
-    }
-  }
-
-  private createFirstScene(): Scene {
-    switch (new URLSearchParams(location.search).get('scene')) {
-      case 'reflections':
-        return new ReflectionScene();
-
-      case 'water':
-        return new WaterScene();
-
-      default:
-        return new LightingScene();
+      SceneManager.push(new EditorScene());
     }
   }
 

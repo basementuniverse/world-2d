@@ -17,7 +17,7 @@ import { LightActor } from '../actors/LightActor';
 import { RegionShadowCasterActor } from '../actors/RegionShadowCasterActor';
 import { WallShadowReceiverActor } from '../actors/WallShadowReceiverActor';
 import Game from '../Game';
-import { LightingScene } from './LightingScene';
+import { EditorScene } from './EditorScene';
 import { lineInRectangle, lineYIntercept } from '../utilities';
 
 export class TestScene extends Scene {
@@ -46,20 +46,20 @@ export class TestScene extends Scene {
     });
 
     this.caster = new RegionShadowCasterActor(
-      this as unknown as LightingScene,
+      this as unknown as EditorScene,
       {
         position: vec2(200, 500),
         size: vec2(100, 100),
       }
     );
     this.receiver = new WallShadowReceiverActor(
-      this as unknown as LightingScene,
+      this as unknown as EditorScene,
       {
         position: vec2(350, 500),
         size: vec2(100, 100),
       }
     );
-    this.light = new LightActor(this as unknown as LightingScene, {
+    this.light = new LightActor(this as unknown as EditorScene, {
       position: vec2(300, 300),
       radius: 10,
     });

@@ -1,0 +1,51 @@
+{
+  "camera": { "position": { "x": 224, "y": 160 }, "scale": 2 },
+  "options": {
+    "imageSmoothingEnabled": false,
+    "softShadowsEnabled": true,
+    "ambientLightColour": "#aaa",
+    "shaderBanding": 0,
+    "shaderShininess": 96,
+    "surfaceMapScale": 0.5
+  },
+  "waterOptions": { "resolutionScale": 0.5 },
+  "actors": [
+    {
+      "type": "GroundShadowReceiver",
+      "position": { "x": 0, "y": 0 },
+      "size": { "x": 448, "y": 320 },
+      "spriteName": "shore",
+      "normalMapName": ""
+    },
+    {
+      "type": "GroundShadowReceiver",
+      "position": { "x": 64, "y": 64 },
+      "size": { "x": 352, "y": 192 },
+      "zIndex": 1,
+      "spriteName": "lakebed",
+      "normalMapName": ""
+    },
+    {
+      "type": "Water",
+      "position": { "x": 64, "y": 64 },
+      "size": { "x": 352, "y": 192 },
+      "shoreWidth": 48,
+      "flow": { "x": 0.6, "y": 0 },
+      "settings": { "flowSpeed": 18, "pixelSize": 1 }
+    },
+    {
+      "type": "Prop",
+      "position": { "x": 250, "y": 160 },
+      "size": { "x": 16, "y": 32 },
+      "spriteName": "urn",
+      "submersible": { "enabled": true, "maxDepth": 14, "footOffset": 0, "ripples": false }
+    },
+    {
+      "type": "Wall",
+      "position": { "x": 176, "y": 52 },
+      "size": { "x": 128, "y": 16 }
+    },
+    { "type": "Light", "position": { "x": 190, "y": 130 }, "radius": 260, "colour": "#fff4dc", "height": 64 },
+    { "type": "Character", "position": { "x": 40, "y": 180 } }
+  ]
+}

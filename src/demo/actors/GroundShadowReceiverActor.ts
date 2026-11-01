@@ -1,8 +1,9 @@
-import ContentManager from '@basementuniverse/content-manager';
 import { vec2 } from '@basementuniverse/vec';
 import { v4 as uuid } from 'uuid';
 import { GroundReceiver, GroundReceiverOptions } from '../../lighting';
-import { LightingScene } from '../scenes/LightingScene';
+import { FloorReflectionReceiver } from '../../reflections';
+import { addColour, addImage, getImage } from '../gui';
+import { EditorScene } from '../scenes/EditorScene';
 import { EditorActor } from './EditorActor';
 
 export class GroundShadowReceiverActor extends EditorActor {
@@ -15,14 +16,17 @@ export class GroundShadowReceiverActor extends EditorActor {
   protected readonly maxSize = vec2(1024, 1024);
 
   public size: vec2 = vec2(256, 256);
-  public zIndex: number = 0;
   public colour: string = '#ddd';
   public spriteName: string = 'ground1';
   public normalMapName: string = 'ground1-normal';
   public specularMapName: string = '';
+  public reflective: boolean = false;
+  public reflectionStrength: number = 0.45;
+
+  private reflection: FloorReflectionReceiver | null = null;
 
   public constructor(
-    scene: LightingScene,
+    scene: EditorScene,
     data: Partial<GroundShadowReceiverActor> = {}
   ) {
     super(scene);
@@ -31,14 +35,20 @@ export class GroundShadowReceiverActor extends EditorActor {
       id: data.id ?? uuid().split('-')[0],
     });
 
-    this.object = scene.lightingSystem.addGround(this.objectOptions());
+    this.object = scene.world.addGround(this.objectOptions());
+    this.syncReflection();
+  }
 
-    this.folder = this.createFolder();
-    this.folder.add(this, 'zIndex');
-    this.folder.add(this, 'colour');
-    this.folder.add(this, 'spriteName');
-    this.folder.add(this, 'normalMapName');
-    this.folder.add(this, 'specularMapName');
+  public createControls(folder: dat.GUI) {
+    super.createControls(folder);
+
+    folder.add(this, 'zIndex');
+    addColour(folder, this, 'colour');
+    addImage(folder, this, 'spriteName');
+    addImage(folder, this, 'normalMapName', '-normal');
+    addImage(folder, this, 'specularMapName', '-specular');
+    folder.add(this, 'reflective');
+    folder.add(this, 'reflectionStrength', 0, 1, 0.01);
   }
 
   private objectOptions(): GroundReceiverOptions {
@@ -47,16 +57,33 @@ export class GroundShadowReceiverActor extends EditorActor {
       size: this.size,
       zIndex: this.zIndex,
       colour: this.colour,
-      image: ContentManager.get<HTMLImageElement>(this.spriteName) ?? null,
-      normalMap:
-        ContentManager.get<HTMLImageElement>(this.normalMapName) ?? null,
-      specularMap:
-        ContentManager.get<HTMLImageElement>(this.specularMapName) ?? null,
+      image: getImage(this.spriteName),
+      normalMap: getImage(this.normalMapName),
+      specularMap: getImage(this.specularMapName),
     };
+  }
+
+  private syncReflection() {
+    if (this.reflective && !this.reflection) {
+      this.reflection = this.scene.world.addFloorReflection(this.object);
+    }
+
+    if (!this.reflective && this.reflection) {
+      this.reflection.remove();
+      this.reflection = null;
+    }
+
+    if (this.reflection) {
+      this.reflection.position = this.position;
+      this.reflection.size = this.size;
+      this.reflection.strength =
+        this.reflectionStrength * this.scene.reflectionStrength.floor;
+    }
   }
 
   protected sync() {
     this.object.set(this.objectOptions());
+    this.syncReflection();
   }
 
   public serialise(): any {
@@ -70,11 +97,13 @@ export class GroundShadowReceiverActor extends EditorActor {
       spriteName: this.spriteName,
       normalMapName: this.normalMapName,
       specularMapName: this.specularMapName,
+      reflective: this.reflective,
+      reflectionStrength: this.reflectionStrength,
     };
   }
 
   public static deserialise(
-    scene: LightingScene,
+    scene: EditorScene,
     data: any
   ): GroundShadowReceiverActor {
     return new GroundShadowReceiverActor(scene, data);

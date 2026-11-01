@@ -1,0 +1,70 @@
+{
+  "camera": { "position": { "x": 160, "y": 112 }, "scale": 2.5 },
+  "options": {
+    "imageSmoothingEnabled": false,
+    "softShadowsEnabled": true,
+    "ambientLightColour": "#999"
+  },
+  "actors": [
+    {
+      "type": "GroundShadowReceiver",
+      "position": { "x": 0, "y": 48 },
+      "size": { "x": 320, "y": 172 },
+      "spriteName": "ground4",
+      "normalMapName": "ground4-normal",
+      "reflective": true,
+      "reflectionStrength": 0.45
+    },
+    {
+      "type": "GroundShadowReceiver",
+      "position": { "x": 0, "y": 220 },
+      "size": { "x": 320, "y": 80 },
+      "spriteName": "ground1",
+      "normalMapName": ""
+    },
+    {
+      "type": "Wall",
+      "position": { "x": 0, "y": 32 },
+      "size": { "x": 96, "y": 16 },
+      "height": 64,
+      "reflectionSource": false
+    },
+    {
+      "type": "Wall",
+      "position": { "x": 96, "y": 32 },
+      "size": { "x": 112, "y": 16 },
+      "height": 64,
+      "reflectionSource": false,
+      "mirror": { "enabled": true, "strength": 1, "inset": 4 }
+    },
+    {
+      "type": "Wall",
+      "position": { "x": 208, "y": 32 },
+      "size": { "x": 64, "y": 16 },
+      "height": 64,
+      "reflectionSource": false,
+      "mirror": { "enabled": true, "strength": 1, "inset": 8, "shape": "ellipse" }
+    },
+    {
+      "type": "Wall",
+      "position": { "x": 272, "y": 32 },
+      "size": { "x": 48, "y": 16 },
+      "height": 64,
+      "reflectionSource": false
+    },
+    {
+      "type": "Prop",
+      "position": { "x": 56, "y": 120 },
+      "size": { "x": 32, "y": 32 },
+      "spriteName": "anvil"
+    },
+    {
+      "type": "Prop",
+      "position": { "x": 250, "y": 110 },
+      "size": { "x": 16, "y": 32 },
+      "spriteName": "urn"
+    },
+    { "type": "Light", "position": { "x": 160, "y": 90 }, "radius": 220, "colour": "#ffe8c0", "height": 48 },
+    { "type": "Character", "position": { "x": 160, "y": 130 } }
+  ]
+}

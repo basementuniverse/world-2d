@@ -235,6 +235,7 @@ export class WaterRegion {
   private depthGrid: WaterGrid<number> = [[1]];
   private shape: Uint8Array | null = null;
   private rainTime: number = 0;
+  private moveCallbacks: ((position: vec2) => void)[] = [];
   private removeCallbacks: (() => void)[] = [];
 
   public constructor(system: WaterSystem, options: WaterRegionOptions) {
@@ -454,6 +455,21 @@ export class WaterRegion {
         }
       );
     }
+  }
+
+  /**
+   * Move this region to a new world position
+   */
+  public moveTo(position: vec2) {
+    this.position = vec2.cpy(position);
+    this.moveCallbacks.forEach(callback => callback(this.position));
+  }
+
+  /**
+   * Add a function to be called when this region is moved
+   */
+  public onMove(callback: (position: vec2) => void) {
+    this.moveCallbacks.push(callback);
   }
 
   /**

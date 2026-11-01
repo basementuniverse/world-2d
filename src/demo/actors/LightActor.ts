@@ -5,7 +5,8 @@ import { vec2 } from '@basementuniverse/vec';
 import { v4 as uuid } from 'uuid';
 import { Light, LightOptions } from '../../lighting';
 import Game from '../Game';
-import { LightingScene } from '../scenes/LightingScene';
+import { addColour } from '../gui';
+import { EditorScene } from '../scenes/EditorScene';
 import { EditorActor } from './EditorActor';
 
 export class LightActor extends EditorActor {
@@ -28,7 +29,7 @@ export class LightActor extends EditorActor {
   public height: number = 48;
   public castShadows: boolean = true;
 
-  public constructor(scene: LightingScene, data: Partial<LightActor> = {}) {
+  public constructor(scene: EditorScene, data: Partial<LightActor> = {}) {
     super(scene);
 
     Object.assign(this, data, {
@@ -36,21 +37,17 @@ export class LightActor extends EditorActor {
     });
 
     this.object = scene.lightingSystem.addLight(this.objectOptions());
+  }
 
-    this.folder = Game.gui.addFolder(`Light ${this.id}`);
-    this.folder.add(this.position, 'x').listen();
-    this.folder.add(this.position, 'y').listen();
-    this.folder.add(
-      this,
-      'radius',
-      LightActor.MIN_RADIUS,
-      LightActor.MAX_RADIUS
-    );
-    this.folder.add(this, 'colour');
-    this.folder.add(this, 'coreRadius', 0, 1);
-    this.folder.add(this, 'intensity', 0, 1);
-    this.folder.add(this, 'height', 1, 200);
-    this.folder.add(this, 'castShadows');
+  public createControls(folder: dat.GUI) {
+    folder.add(this.position, 'x').step(1);
+    folder.add(this.position, 'y').step(1);
+    folder.add(this, 'radius', LightActor.MIN_RADIUS, LightActor.MAX_RADIUS);
+    addColour(folder, this, 'colour');
+    folder.add(this, 'coreRadius', 0, 1);
+    folder.add(this, 'intensity', 0, 1);
+    folder.add(this, 'height', 1, 200);
+    folder.add(this, 'castShadows');
   }
 
   private objectOptions(): LightOptions {
@@ -83,7 +80,7 @@ export class LightActor extends EditorActor {
     };
   }
 
-  public static deserialise(scene: LightingScene, data: any): LightActor {
+  public static deserialise(scene: EditorScene, data: any): LightActor {
     // In older scenes the core radius was called 'intensity'
     if (data.coreRadius === undefined && data.intensity !== undefined) {
       return new LightActor(scene, {

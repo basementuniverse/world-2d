@@ -1,7 +1,7 @@
 import { vec2 } from '@basementuniverse/vec';
 import { v4 as uuid } from 'uuid';
 import { CircleCaster, CircleCasterOptions } from '../../lighting';
-import { LightingScene } from '../scenes/LightingScene';
+import { EditorScene } from '../scenes/EditorScene';
 import { EditorActor } from './EditorActor';
 
 export class CircleShadowCasterActor extends EditorActor {
@@ -19,7 +19,7 @@ export class CircleShadowCasterActor extends EditorActor {
   public alpha: number = 1;
 
   public constructor(
-    scene: LightingScene,
+    scene: EditorScene,
     data: Partial<CircleShadowCasterActor> = {}
   ) {
     super(scene);
@@ -29,13 +29,16 @@ export class CircleShadowCasterActor extends EditorActor {
     });
 
     this.object = scene.lightingSystem.addCircleCaster(this.objectOptions());
+  }
 
-    this.folder = this.createFolder();
-    this.folder.add(this.anchor, 'x').name('anchor x');
-    this.folder.add(this.anchor, 'y').name('anchor y');
-    this.folder.add(this, 'minShadowDistance');
-    this.folder.add(this, 'maxShadowDistance');
-    this.folder.add(this, 'alpha', 0, 1, 0.01);
+  public createControls(folder: dat.GUI) {
+    super.createControls(folder);
+
+    folder.add(this.anchor, 'x').name('anchor x');
+    folder.add(this.anchor, 'y').name('anchor y');
+    folder.add(this, 'minShadowDistance');
+    folder.add(this, 'maxShadowDistance');
+    folder.add(this, 'alpha', 0, 1, 0.01);
   }
 
   private objectOptions(): CircleCasterOptions {
@@ -67,7 +70,7 @@ export class CircleShadowCasterActor extends EditorActor {
   }
 
   public static deserialise(
-    scene: LightingScene,
+    scene: EditorScene,
     data: any
   ): CircleShadowCasterActor {
     return new CircleShadowCasterActor(scene, data);
