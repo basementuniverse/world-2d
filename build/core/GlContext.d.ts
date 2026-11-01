@@ -66,16 +66,22 @@ export declare class GlContext {
     createRenderTarget(): GlRenderTarget;
     /**
      * Bind a texture and set its filtering
+     *
+     * Textures can only repeat if their size is a power of 2
      */
-    bindTexture(unit: number, texture: WebGLTexture, filter: number): void;
+    bindTexture(unit: number, texture: WebGLTexture, filter: number, repeat?: boolean): void;
     /**
      * Replace the contents of a texture with an image
      */
-    upload(unit: number, texture: WebGLTexture, image: SceneImage, filter: number): void;
+    upload(unit: number, texture: WebGLTexture, image: SceneImage, filter: number, repeat?: boolean): void;
     /**
-     * Bind an image to `IMAGE_UNIT`, uploading it if we haven't seen it before
+     * Replace the contents of a texture with RGBA pixel data
      */
-    bindImage(image: SceneImage, filter: number): void;
+    uploadData(unit: number, texture: WebGLTexture, size: vec2, data: Uint8Array, filter: number, repeat?: boolean): void;
+    /**
+     * Bind an image, uploading it if we haven't seen it before
+     */
+    bindImage(image: SceneImage, filter: number, unit?: number): void;
     /**
      * Canvases might have changed since they were last used, so `bindImage()`
      * should upload them again

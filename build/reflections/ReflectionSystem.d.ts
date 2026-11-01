@@ -29,6 +29,7 @@ export declare class ReflectionSystem {
     private floorContext;
     private wallContext;
     private frame;
+    private floorSourcesReady;
     /**
      * Add something that appears in reflections
      */
@@ -49,6 +50,10 @@ export declare class ReflectionSystem {
      * Get ready to draw reflections for a frame
      */
     prepare(frame: Frame): void;
+    /**
+     * Make sure `floorSourcesCanvas` is up to date for this frame
+     */
+    drawFloorSources(): HTMLCanvasElement;
     /**
      * Make sure a screen-sized context matches the frame and clear it, ready for
      * drawing in world coordinates

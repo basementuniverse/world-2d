@@ -245,7 +245,7 @@ export class Light {
    */
   private resetShadowContext(context: CanvasRenderingContext2D) {
     const size = Math.floor(this._radius * 2);
-    if (context.canvas.width !== size) {
+    if (context.canvas.width !== size || context.canvas.height !== size) {
       context.canvas.width = context.canvas.height = size;
     }
 

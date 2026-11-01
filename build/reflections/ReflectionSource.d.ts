@@ -63,6 +63,14 @@ export declare class ReflectionSource {
     wall: boolean;
     wallDirections: Record<string, string>;
     wallImage: SceneImage | null;
+    /**
+     * World y-position where this source meets the surface of some water, or null
+     * if it isn't in water
+     *
+     * Only the part above this line is reflected, and it's reflected around this
+     * line instead of around the source's feet
+     */
+    waterline: number | null;
     private reflections;
     constructor(reflections: ReflectionSystem, options: ReflectionSourceOptions);
     /**
@@ -73,6 +81,10 @@ export declare class ReflectionSource {
      * Where this source meets the ground
      */
     get foot(): number;
+    /**
+     * The line that this source is reflected around in a floor
+     */
+    private get floorAxis();
     /**
      * The area covered by this source when it's reflected in a floor
      */

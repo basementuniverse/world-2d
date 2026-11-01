@@ -15,6 +15,10 @@ export type Frame = {
     context: CanvasRenderingContext2D;
     camera: SceneCamera;
     screen: vec2;
+    /**
+     * A screen-sized image of everything that's reflected in the floor
+     */
+    reflectionMap?: SceneImage | null;
 };
 export type Colour = {
     r: number;

@@ -1,38 +1,18 @@
 import Camera from '@basementuniverse/camera';
 import ContentManager from '@basementuniverse/content-manager';
 import Debug from '@basementuniverse/debug';
-import InputManager from '@basementuniverse/input-manager';
 import { Scene } from '@basementuniverse/scene-manager';
-import { Sprite, SpriteAnimationOptions } from '@basementuniverse/sprite';
-import { textureAtlas } from '@basementuniverse/texture-atlas';
 import { vec2 } from '@basementuniverse/vec';
 import { LightingSystem } from '../../lighting';
 import { ReflectionSystem } from '../../reflections';
 import { World } from '../../world';
 import Game from '../Game';
-
-const DIRECTIONS: Record<string, { row: number; movement: vec2 }> = {
-  east: { row: 0, movement: vec2(1, 0) },
-  south: { row: 2, movement: vec2(0, 1) },
-  west: { row: 4, movement: vec2(-1, 0) },
-  north: { row: 6, movement: vec2(0, -1) },
-};
-
-const INPUT_KEYS: Record<string, string[]> = {
-  east: ['ArrowRight', 'KeyD'],
-  south: ['ArrowDown', 'KeyS'],
-  west: ['ArrowLeft', 'KeyA'],
-  north: ['ArrowUp', 'KeyW'],
-};
+import { Hero } from '../Hero';
 
 /**
  * A room with a reflective floor and mirrors on the back wall
  */
 export class ReflectionScene extends Scene {
-  private static readonly HERO_SPEED: number = 90;
-  private static readonly HERO_SCALE: number = 1;
-  private static readonly HERO_ORIGIN: vec2 = vec2(25, 44);
-  private static readonly HERO_FOOT_OFFSET: number = 6;
   private static readonly HERO_AREA = {
     min: vec2(16, 58),
     max: vec2(304, 270),
@@ -43,7 +23,7 @@ export class ReflectionScene extends Scene {
   public camera: Camera;
   public world: World;
 
-  private hero: Sprite;
+  private hero: Hero;
 
   public initialise() {
     this.camera = new Camera(vec2(), {
@@ -64,72 +44,19 @@ export class ReflectionScene extends Scene {
       reflections: new ReflectionSystem(),
     });
 
-    this.hero = this.createHero();
+    this.hero = new Hero(this.image('character-spritesheet'), vec2(160, 130));
+    this.world.addActor({
+      sprite: this.hero.sprite,
+      shadow: 'none',
+      reflectionSource: { footOffset: Hero.FOOT_OFFSET },
+    });
+
     this.createRoom();
     this.createObjects();
   }
 
   private image(name: string): HTMLImageElement {
     return ContentManager.get<HTMLImageElement>(name)!;
-  }
-
-  private createHero(): Sprite {
-    const regions: Record<string, object> = {};
-    for (const [direction, { row }] of Object.entries(DIRECTIONS)) {
-      regions[`idle-${direction}`] = { x: 0, y: row };
-      regions[`walk-${direction}`] = { x: 1, y: row, repeat: 4 };
-    }
-
-    const frames = textureAtlas(this.image('character-spritesheet'), {
-      relative: true,
-      width: 9,
-      height: 8,
-      regions: regions as any,
-    });
-
-    const animation = (
-      images: HTMLCanvasElement[],
-      name: string
-    ): SpriteAnimationOptions => ({
-      name,
-      frameCount: images.length,
-      frameRate: 8,
-      images,
-    });
-
-    const animations: Record<
-      string,
-      Record<string, SpriteAnimationOptions>
-    > = { idle: {}, walk: {} };
-    for (const direction of Object.keys(DIRECTIONS)) {
-      animations.idle[direction] = animation(
-        [frames[`idle-${direction}`]],
-        'idle'
-      );
-      animations.walk[direction] = animation(
-        [1, 2, 3, 4].map(n => frames[`walk-${direction}-${n}`]),
-        'walk'
-      );
-    }
-
-    const hero = new Sprite({
-      position: vec2(160, 130),
-      origin: ReflectionScene.HERO_ORIGIN,
-      scale: ReflectionScene.HERO_SCALE,
-      directions: Object.keys(DIRECTIONS),
-      defaultDirection: 'north',
-      animations,
-      defaultAnimation: 'idle',
-    });
-    hero.update(0);
-
-    this.world.addActor({
-      sprite: hero,
-      shadow: 'none',
-      reflectionSource: { footOffset: ReflectionScene.HERO_FOOT_OFFSET },
-    });
-
-    return hero;
   }
 
   private createRoom() {
@@ -252,34 +179,12 @@ export class ReflectionScene extends Scene {
   }
 
   public update(dt: number) {
+    const { min, max } = ReflectionScene.HERO_AREA;
+
     Debug.value('Move', 'arrow keys or WASD');
-    Debug.value('Direction', this.hero.direction);
+    Debug.value('Direction', this.hero.sprite.direction);
 
-    const pressed = Object.keys(DIRECTIONS).filter(direction =>
-      INPUT_KEYS[direction].some(key => InputManager.keyDown(key))
-    );
-
-    if (pressed.length > 0) {
-      const movement = pressed
-        .map(direction => DIRECTIONS[direction].movement)
-        .reduce(vec2.add, vec2());
-      const { min, max } = ReflectionScene.HERO_AREA;
-      const position = vec2.add(
-        this.hero.position,
-        vec2.mul(vec2.nor(movement), ReflectionScene.HERO_SPEED * dt)
-      );
-
-      this.hero.position = vec2(
-        Math.min(Math.max(position.x, min.x), max.x),
-        Math.min(Math.max(position.y, min.y), max.y)
-      );
-      this.hero.direction = pressed[pressed.length - 1];
-      this.hero.animation = 'walk';
-    } else {
-      this.hero.animation = 'idle';
-    }
-
-    this.hero.update(dt);
+    this.hero.update(dt, min, max);
     this.camera.update(Game.screen);
   }
 

@@ -213,7 +213,7 @@ export class ShaderPass {
     for (const item of scene.surfaces) {
       const { surface } = item;
       const mask = surface.getMask();
-      if (mask === null) {
+      if (mask === null || surface.visibleHeight <= 0) {
         continue;
       }
 
@@ -232,9 +232,12 @@ export class ShaderPass {
         }
       }
 
+      const visibleSize = vec2(surface.size.x, surface.visibleHeight);
+      maskRectangle[3] *= visibleSize.y / surface.size.y;
+
       const topLeft = scene.camera.worldToScreen(surface.position);
       const bottomRight = scene.camera.worldToScreen(
-        vec2.add(surface.position, surface.size)
+        vec2.add(surface.position, visibleSize)
       );
 
       gl.uniform1f(uniforms.u_useMask, mask === 'solid' ? 0 : 1);

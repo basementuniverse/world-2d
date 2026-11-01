@@ -188,16 +188,24 @@ export class GlContext {
 
   /**
    * Bind a texture and set its filtering
+   *
+   * Textures can only repeat if their size is a power of 2
    */
-  public bindTexture(unit: number, texture: WebGLTexture, filter: number) {
+  public bindTexture(
+    unit: number,
+    texture: WebGLTexture,
+    filter: number,
+    repeat: boolean = false
+  ) {
     const gl = this.gl!;
+    const wrap = repeat ? gl.REPEAT : gl.CLAMP_TO_EDGE;
 
     gl.activeTexture(gl.TEXTURE0 + unit);
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, wrap);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, wrap);
   }
 
   /**
@@ -207,18 +215,50 @@ export class GlContext {
     unit: number,
     texture: WebGLTexture,
     image: SceneImage,
-    filter: number
+    filter: number,
+    repeat: boolean = false
   ) {
     const gl = this.gl!;
 
-    this.bindTexture(unit, texture, filter);
+    this.bindTexture(unit, texture, filter, repeat);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
   }
 
   /**
-   * Bind an image to `IMAGE_UNIT`, uploading it if we haven't seen it before
+   * Replace the contents of a texture with RGBA pixel data
    */
-  public bindImage(image: SceneImage, filter: number) {
+  public uploadData(
+    unit: number,
+    texture: WebGLTexture,
+    size: vec2,
+    data: Uint8Array,
+    filter: number,
+    repeat: boolean = false
+  ) {
+    const gl = this.gl!;
+
+    this.bindTexture(unit, texture, filter, repeat);
+    gl.texImage2D(
+      gl.TEXTURE_2D,
+      0,
+      gl.RGBA,
+      size.x,
+      size.y,
+      0,
+      gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      data
+    );
+  }
+
+  /**
+   * Bind an image, uploading it if we haven't seen it before
+   */
+  public bindImage(
+    image: SceneImage,
+    filter: number,
+    unit: number = GlContext.IMAGE_UNIT
+  ) {
     const gl = this.gl!;
 
     let texture = this.imageTextures.get(image);
@@ -228,7 +268,7 @@ export class GlContext {
       this.imageTextures.set(image, texture);
     }
 
-    this.bindTexture(GlContext.IMAGE_UNIT, texture, filter);
+    this.bindTexture(unit, texture, filter);
 
     const isStale =
       image instanceof HTMLCanvasElement && !this.uploadedCanvases.has(image);

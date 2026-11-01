@@ -47,6 +47,7 @@ export class ReflectionSystem {
   private wallContext = ReflectionSystem.createContext();
 
   private frame: Frame | null = null;
+  private floorSourcesReady = false;
 
   /**
    * Add something that appears in reflections
@@ -96,6 +97,31 @@ export class ReflectionSystem {
    */
   public prepare(frame: Frame) {
     this.frame = frame;
+    this.floorSourcesReady = false;
+  }
+
+  /**
+   * Make sure `floorSourcesCanvas` is up to date for this frame
+   */
+  public drawFloorSources(): HTMLCanvasElement {
+    const { frame } = this;
+    if (!frame || this.floorSourcesReady) {
+      return this.floorSourcesCanvas;
+    }
+
+    const visible = this.visibleArea(frame);
+    const sources = this.sortedSources(
+      this.sources.filter(
+        source =>
+          source.floor && rectanglesIntersect(source.floorBounds, visible)
+      )
+    );
+
+    this.resetContext(this.floorSourcesContext, frame);
+    sources.forEach(source => source.drawInFloor(this.floorSourcesContext));
+    this.floorSourcesReady = true;
+
+    return this.floorSourcesCanvas;
   }
 
   /**
@@ -149,15 +175,7 @@ export class ReflectionSystem {
       return;
     }
 
-    const sources = this.sortedSources(
-      this.sources.filter(
-        source =>
-          source.floor && rectanglesIntersect(source.floorBounds, visible)
-      )
-    );
-
-    this.resetContext(this.floorSourcesContext, frame);
-    sources.forEach(source => source.drawInFloor(this.floorSourcesContext));
+    this.drawFloorSources();
 
     // Start with the shape of the receivers and keep the sources inside it,
     // this way sources don't show through each other when strength is below 1

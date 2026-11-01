@@ -43,13 +43,14 @@ npm run start
 * `src/core` is the code that's shared by every rendering system: types, geometry, and a `GlContext` that wraps a WebGL context
 * `src/lighting` is the lighting system, it only depends on `src/core`
 * `src/reflections` is the reflection system, it only depends on `src/core`
+* `src/water` is the water system, it only depends on `src/core`
 * `src/world` is a `World`, which renders a scene using several systems working together
 * `build/index.js` is the library, it contains all of the above and doesn't depend on the demo
 * `src/demo` is the editor shown in the preview, it builds to `build/game.js` and is a good example of how to use the library
 
 Run `npm run build` to build both.
 
-The demo has a second scene showing reflections, open `index.html?scene=reflections` and use the arrow keys or WASD to move around.
+The demo has 2 more scenes, open `index.html?scene=reflections` or `index.html?scene=water`. Use the arrow keys or WASD to move around, and click on the water to make a splash.
 
 ## How to integrate it into your game
 
@@ -122,21 +123,23 @@ lighting.render(context, camera, context => {
 A `World` renders a scene using all of the systems that you give it. Each system draws its part of the frame without needing to know about the others, and the `World` decides the order.
 
 ```ts
-import { LightingSystem, ReflectionSystem, World } from 'lighting-2d';
+import { LightingSystem, ReflectionSystem, WaterSystem, World } from 'lighting-2d';
 
 const world = new World({
   lighting: new LightingSystem({ ambientLightColour: '#555' }),
   reflections: new ReflectionSystem(),
+  water: new WaterSystem(),
 });
 
 world.addGround({ position: vec2(0, 0), size: vec2(800, 600), image: groundImage });
 world.addLight({ position: vec2(250, 250), radius: 200 });
 const hero = world.addActor({ sprite: heroSprite });
 
+world.update(dt);
 world.render(context, camera);
 ```
 
-`world.lighting` is the `LightingSystem`, if you need one of its other methods.
+`world.lighting`, `world.reflections`, and `world.water` are the systems, if you need one of their other methods. All of the systems in a `World` share one WebGL context, you can pass in your own as `glContext`.
 
 If you don't pass in a `LightingSystem` then the scene is drawn without any lighting and WebGL isn't used. You can do the same thing with the `lightingEnabled` option on a `LightingSystem`, which can also be changed at any time.
 
@@ -231,6 +234,115 @@ There are some limits to this:
 * If a sprite has to be drawn facing a different direction in a wall, then its `preRender` and `postRender` hooks won't be used for the reflection.
 
 If you aren't using a `World`, see `src/reflections/ReflectionSystem.ts` for the steps.
+
+### Water
+
+Add an area of water with `world.addWater()`, and call `world.update(dt)` every frame to keep it moving.
+
+```ts
+const lake = world.addWater({
+  position: vec2(64, 64),
+  size: vec2(384, 192),
+  colour: '#3f8fa8',
+  deepColour: '#123f63',
+  opacity: 0.7,
+});
+```
+
+Water shows the ground and anything else that's underneath it. It also receives light and shadows like the ground does, and its waves catch the light if the scene has a `LightingSystem`.
+
+#### Shores
+
+Where the water ends depends on `mask` and `depth`:
+
+* `mask: image` an image whose alpha channel decides where the water is. This makes a hard edge, so it's useful for shores that follow the shape of the terrain
+* `depth: number | number[][]` how deep the water is from 0 to 1, this can be a grid
+* `shoreBlend: number` the water fades out at depths below this, so it blends in smoothly if the depth goes down to 0
+
+This means that you can use both kinds of shore on the same water. If the water is still deep at the edge of the mask then you'll get a hard edge, and if it gets shallow before it reaches the edge then it fades out.
+
+Grids can be any size, the first index is the row. Values are interpolated between cells, so a grid with a cell for each tile will give you a smooth result:
+
+```ts
+world.addWater({
+  // ...
+  mask: shoreMaskImage,
+  depth: [
+    [1.0, 0.8, 0.5, 0.1],
+    [1.0, 1.0, 0.6, 0.0],
+    [1.0, 0.8, 0.5, 0.1],
+  ],
+  shoreBlend: 0.2,
+});
+```
+
+#### Flow
+
+`flow` sets which way the water moves and how quickly. This can be a single vector or a grid of vectors, which should be no longer than 1:
+
+```ts
+world.addWater({
+  // ...
+  flow: [
+    [vec2(0, 0), vec2(0.5, 0), vec2(0, 0)],
+    [vec2(0.2, 0.2), vec2(1, 0), vec2(0.2, -0.2)],
+  ],
+  flowSpeed: 18,
+});
+```
+
+`region.setDepth()` and `region.setFlow()` will replace a grid at any time.
+
+Waves are moved along the flow using [flow maps](https://graphicsrunner.blogspot.com/2010/08/water-using-flow-maps.html). Moving a normal map too far stretches it, so there are 2 sets of waves half a cycle apart. Each one moves for a while and then fades out while it jumps back to the start, and some noise stops all of the water from fading at the same time.
+
+#### Ripples and rain
+
+Disturbing the water makes ripples, which spread out and bounce off the edges of the mask:
+
+```ts
+world.water.disturb(position, { radius: 8, strength: 1.5 });
+```
+
+The `rain` option sets how many raindrops land each second for every 10000 square world units.
+
+Ripples are simulated on a grid, there's a cell for every `rippleCellSize` world units and no more than 256 cells on the longest side. Nothing is calculated while the water is still.
+
+#### Things in the water
+
+An actor with `submersible` will go underwater when it stands in water, the deeper the water is the more of it goes under:
+
+```ts
+const hero = world.addActor({
+  sprite: heroSprite,
+  reflectionSource: true,
+  submersible: {
+    maxDepth: 22,
+    footOffset: 6,
+  },
+});
+```
+
+The actor is split at the waterline. The lower part is drawn underneath the water, so it's bent and tinted in the same way as the terrain, and it's lit as if it was the water's surface. The upper part is drawn on top, and it's reflected around the waterline. Moving through the water makes ripples, set `ripples: false` to turn this off.
+
+Actors without `submersible` stand on top of the water, and so do walls.
+
+#### Options
+
+As well as the options above, these can be changed at any time on the object returned from `addWater()`:
+
+* `refraction: number` how far waves can bend what's underneath the water, this is stronger in deeper water
+* `reflection: number` how strong reflections are from 0 to 1, this needs a `ReflectionSystem`
+* `reflectionDistortion: number` how far waves can bend reflections
+* `normalMap: image` a tiling normal map for waves, the default is generated
+* `waveSize`, `waveSpeed`, `waveStrength` the size, speed, and steepness of the waves
+* `rippleStrength`, `rippleSpeed`, `rippleDamping` how ripples look and behave
+* `surfaceShading: number` how much slopes change the brightness of the water, this means waves can be seen even without any lights
+* `specular: number` how shiny the water is, this needs a `LightingSystem`. The size of highlights comes from `shaderShininess` on the `LightingSystem`
+* `pixelSize: number` snap the water to a grid of this size, for a pixel art style
+
+If you change the `mask` then call `region.invalidateMask()`. Regions shouldn't overlap each other.
+
+If you aren't using a `World`, see `src/water/WaterSystem.ts` for the steps.
 
 ### Animated actors
 

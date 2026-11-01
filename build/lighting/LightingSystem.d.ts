@@ -176,6 +176,11 @@ export declare class LightingSystem {
      */
     optimise(onMerge?: (merged: WallReceiver | RegionCaster, a: WallReceiver | RegionCaster, b: WallReceiver | RegionCaster) => void): void;
     /**
+     * Share a WebGL context with other systems, this needs to be called before
+     * the first render and does nothing if a context has already been set
+     */
+    useGlContext(glContext: GlContext): void;
+    /**
      * Get the shader pass, if it can be used
      */
     private getShaderPass;

@@ -339,6 +339,14 @@ export class LightingSystem {
   }
 
   /**
+   * Share a WebGL context with other systems, this needs to be called before
+   * the first render and does nothing if a context has already been set
+   */
+  public useGlContext(glContext: GlContext) {
+    this.glContext ??= glContext;
+  }
+
+  /**
    * Get the shader pass, if it can be used
    */
   private getShaderPass(): ShaderPass | null {

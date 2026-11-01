@@ -228,5 +228,95 @@
     "name": "well-normal",
     "type": "image",
     "args": ["./content/images/well-normal.png"]
+  },
+  {
+    "name": "shore",
+    "type": "image",
+    "args": ["./content/images/shore.png"]
+  },
+  {
+    "name": "lakebed",
+    "type": "image",
+    "args": ["./content/images/lakebed.png"]
+  },
+  {
+    "name": "shore-t",
+    "type": "image",
+    "args": ["./content/images/shore-t.png"]
+  },
+  {
+    "name": "shore-b",
+    "type": "image",
+    "args": ["./content/images/shore-b.png"]
+  },
+  {
+    "name": "shore-l",
+    "type": "image",
+    "args": ["./content/images/shore-l.png"]
+  },
+  {
+    "name": "shore-r",
+    "type": "image",
+    "args": ["./content/images/shore-r.png"]
+  },
+  {
+    "name": "shore-tl",
+    "type": "image",
+    "args": ["./content/images/shore-tl.png"]
+  },
+  {
+    "name": "shore-tr",
+    "type": "image",
+    "args": ["./content/images/shore-tr.png"]
+  },
+  {
+    "name": "shore-bl",
+    "type": "image",
+    "args": ["./content/images/shore-bl.png"]
+  },
+  {
+    "name": "shore-br",
+    "type": "image",
+    "args": ["./content/images/shore-br.png"]
+  },
+  {
+    "name": "shore-t-mask",
+    "type": "image",
+    "args": ["./content/images/shore-t-mask.png"]
+  },
+  {
+    "name": "shore-b-mask",
+    "type": "image",
+    "args": ["./content/images/shore-b-mask.png"]
+  },
+  {
+    "name": "shore-l-mask",
+    "type": "image",
+    "args": ["./content/images/shore-l-mask.png"]
+  },
+  {
+    "name": "shore-r-mask",
+    "type": "image",
+    "args": ["./content/images/shore-r-mask.png"]
+  },
+  {
+    "name": "shore-tl-mask",
+    "type": "image",
+    "args": ["./content/images/shore-tl-mask.png"]
+  },
+  {
+    "name": "shore-tr-mask",
+    "type": "image",
+    "args": ["./content/images/shore-tr-mask.png"]
+  },
+  {
+    "name": "shore-bl-mask",
+    "type": "image",
+    "args": ["./content/images/shore-bl-mask.png"]
+  },
+  {
+    "name": "shore-br-mask",
+    "type": "image",
+    "args": ["./content/images/shore-br-mask.png"]
   }
 ]

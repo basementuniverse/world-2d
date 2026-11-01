@@ -1,6 +1,7 @@
-import { SceneCamera } from '../core';
+import { GlContext, SceneCamera } from '../core';
 import { Actor, ActorOptions, GroundReceiver, GroundReceiverOptions, Light, LightingSystem, LightOptions, SpriteActorOptions, Wall, WallOptions, WallReceiver } from '../lighting';
 import type { FloorReflectionReceiver, FloorReflectionReceiverOptions, ReflectionSourceSettings, ReflectionSystem, WallReflectionReceiver, WallReflectionReceiverOptions } from '../reflections';
+import type { WaterRegion, WaterRegionOptions, WaterSystem } from '../water';
 export type WorldOptions = {
     /**
      * The lighting system for this world
@@ -14,6 +15,15 @@ export type WorldOptions = {
      * won't have any reflections
      */
     reflections?: ReflectionSystem;
+    /**
+     * The water system for this world, if this isn't set then the scene won't
+     * have any water
+     */
+    water?: WaterSystem;
+    /**
+     * The WebGL context to share between systems, the default is a new context
+     */
+    glContext?: GlContext;
 };
 type ReflectionSourceOption = {
     /**
@@ -22,7 +32,27 @@ type ReflectionSourceOption = {
      */
     reflectionSource?: boolean | ReflectionSourceSettings;
 };
-export type WorldActorOptions = (ActorOptions | SpriteActorOptions) & ReflectionSourceOption;
+export type WorldActorWaterOptions = {
+    /**
+     * How much of this actor is underwater in the deepest water, in world units
+     */
+    maxDepth?: number;
+    /**
+     * How far this actor's feet are above the bottom edge of its image
+     */
+    footOffset?: number;
+    /**
+     * Does this actor make ripples when it moves through the water?
+     */
+    ripples?: boolean;
+};
+export type WorldActorOptions = (ActorOptions | SpriteActorOptions) & ReflectionSourceOption & {
+    /**
+     * Should the lower part of this actor go underwater when it stands in
+     * water? Use an object to configure how it behaves
+     */
+    submersible?: boolean | WorldActorWaterOptions;
+};
 export type WorldGroundOptions = GroundReceiverOptions & {
     /**
      * Should this ground show reflections? Use an object to configure the
@@ -44,14 +74,23 @@ export type WorldWallOptions = WallOptions & ReflectionSourceOption & {
  * this class decides the order. The frame is rendered in these steps:
  *
  * 1. Draw the ground
- * 2. Draw reflections onto the floor
- * 3. Draw the walls and actors that stand on the ground, reflections in a wall
+ * 2. Draw the parts of actors that are underwater
+ * 3. Draw reflections onto the floor
+ * 4. Draw the water, which shows everything drawn so far underneath it
+ * 5. Draw the walls and actors that stand on the ground, reflections in a wall
  *    are drawn along with that wall
- * 4. Apply lighting to the whole scene
+ * 6. Apply lighting to the whole scene
  */
 export declare class World {
+    private static readonly WATER_Z_INDEX;
+    private static readonly DEFAULT_WATER_OPTIONS;
+    private static readonly RIPPLE_DISTANCE;
+    private static readonly RIPPLE_RADIUS;
+    private static readonly RIPPLE_STRENGTH;
     readonly lighting: LightingSystem;
     readonly reflections: ReflectionSystem | null;
+    readonly water: WaterSystem | null;
+    private submersibleActors;
     constructor(options?: WorldOptions);
     /**
      * Make a surface or a group of surfaces look like a single object to the
@@ -75,6 +114,14 @@ export declare class World {
     addActor(options: WorldActorOptions): Actor;
     private addActorReflection;
     /**
+     * Add an area of water, this will return null if this world doesn't have a
+     * water system
+     *
+     * Water is lit in the same way as the ground, and has its own surface for
+     * this so that waves can catch the light
+     */
+    addWater(options: WaterRegionOptions): WaterRegion | null;
+    /**
      * Add a light
      */
     addLight(options: LightOptions): Light;
@@ -93,9 +140,32 @@ export declare class World {
      */
     addMirror(wall: WallReceiver, options?: Partial<WallReflectionReceiverOptions>): WallReflectionReceiver | null;
     /**
+     * Move the world forward, this should be called every frame
+     */
+    update(dt: number): void;
+    /**
+     * Find where a submersible actor's feet are
+     */
+    private footPosition;
+    /**
+     * Actors make ripples as they move through the water
+     */
+    private updateRipples;
+    /**
+     * Find out how far each submersible actor is underwater, this needs to be
+     * done before anything is drawn because it splits the actor into 2 parts
+     */
+    private updateWaterlines;
+    /**
      * Render the scene onto a context
      */
     render(context: CanvasRenderingContext2D, camera: SceneCamera): void;
+    /**
+     * Draw the parts of actors that are underwater, the lowest things on the
+     * screen are drawn last
+     */
+    private drawSubmergedActors;
+    private drawWater;
     /**
      * Draw part of the scene with the camera's transforms applied
      */

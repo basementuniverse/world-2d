@@ -78,6 +78,15 @@ export class ReflectionSource {
   public wallDirections: Record<string, string>;
   public wallImage: SceneImage | null;
 
+  /**
+   * World y-position where this source meets the surface of some water, or null
+   * if it isn't in water
+   *
+   * Only the part above this line is reflected, and it's reflected around this
+   * line instead of around the source's feet
+   */
+  public waterline: number | null = null;
+
   private reflections: ReflectionSystem;
 
   public constructor(
@@ -112,13 +121,20 @@ export class ReflectionSource {
   }
 
   /**
+   * The line that this source is reflected around in a floor
+   */
+  private get floorAxis(): number {
+    return this.waterline ?? this.foot;
+  }
+
+  /**
    * The area covered by this source when it's reflected in a floor
    */
   public get floorBounds(): Rectangle {
     const { position, size } = this.bounds;
 
     return {
-      position: vec2(position.x, this.foot * 2 - (position.y + size.y)),
+      position: vec2(position.x, this.floorAxis * 2 - (position.y + size.y)),
       size,
     };
   }
@@ -143,8 +159,22 @@ export class ReflectionSource {
    */
   public drawInFloor(context: CanvasRenderingContext2D) {
     context.save();
-    context.translate(0, this.foot * 2);
+    context.translate(0, this.floorAxis * 2);
     context.scale(1, -1);
+
+    if (this.waterline !== null) {
+      const { position, size } = this.bounds;
+
+      context.beginPath();
+      context.rect(
+        position.x,
+        position.y,
+        size.x,
+        this.waterline - position.y
+      );
+      context.clip();
+    }
+
     this.draw(context);
     context.restore();
   }

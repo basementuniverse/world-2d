@@ -59,6 +59,14 @@ export abstract class Surface<
   public zIndex: number = 0;
   public customDraw: NonNullable<SurfaceOptions['customDraw']> = {};
 
+  /**
+   * World y-position where this surface stops, or null to show all of it
+   *
+   * The rest of the surface is hidden and doesn't receive any lighting, this is
+   * useful for something that's standing in water
+   */
+  public clipBottom: number | null = null;
+
   protected overlays: DrawCallback[] = [];
 
   private customMaskContext: CanvasRenderingContext2D | null = null;
@@ -112,9 +120,67 @@ export abstract class Surface<
   }
 
   /**
+   * The height of the part of this surface above `clipBottom`
+   */
+  public get visibleHeight(): number {
+    if (this.clipBottom === null) {
+      return this.size.y;
+    }
+
+    const height = this.clipBottom - this.position.y;
+
+    return Math.min(Math.max(height, 0), this.size.y);
+  }
+
+  /**
+   * Call a drawing function, keeping it inside the visible part of this surface
+   */
+  private drawVisible(context: CanvasRenderingContext2D, draw: () => void) {
+    if (this.clipBottom === null) {
+      draw();
+      return;
+    }
+
+    context.save();
+    context.beginPath();
+    context.rect(
+      this.position.x,
+      this.position.y,
+      this.size.x,
+      this.visibleHeight
+    );
+    context.clip();
+    draw();
+    context.restore();
+  }
+
+  /**
    * Draw this surface without its overlays
    */
   public drawContent(context: CanvasRenderingContext2D) {
+    this.drawVisible(context, () => this.drawWholeSurface(context));
+  }
+
+  /**
+   * Draw the part of this surface that's hidden by `clipBottom`
+   */
+  public drawHidden(context: CanvasRenderingContext2D) {
+    if (this.clipBottom === null) {
+      return;
+    }
+
+    const { x, y } = this.position;
+    const height = this.visibleHeight;
+
+    context.save();
+    context.beginPath();
+    context.rect(x, y + height, this.size.x, this.size.y - height);
+    context.clip();
+    this.drawWholeSurface(context);
+    context.restore();
+  }
+
+  private drawWholeSurface(context: CanvasRenderingContext2D) {
     if (this.customDraw.image) {
       this.customDraw.image(context);
       return;
@@ -150,29 +216,33 @@ export abstract class Surface<
   }
 
   public drawNormalMap(context: CanvasRenderingContext2D) {
-    if (this.customDraw.normalMap) {
-      this.customDraw.normalMap(context);
-      return;
-    }
+    this.drawVisible(context, () => {
+      if (this.customDraw.normalMap) {
+        this.customDraw.normalMap(context);
+        return;
+      }
 
-    this.drawColourMap(
-      context,
-      this.normalMap,
-      Surface.NORMAL_MAP_DEFAULT_COLOUR
-    );
+      this.drawColourMap(
+        context,
+        this.normalMap,
+        Surface.NORMAL_MAP_DEFAULT_COLOUR
+      );
+    });
   }
 
   public drawSpecularMap(context: CanvasRenderingContext2D) {
-    if (this.customDraw.specularMap) {
-      this.customDraw.specularMap(context);
-      return;
-    }
+    this.drawVisible(context, () => {
+      if (this.customDraw.specularMap) {
+        this.customDraw.specularMap(context);
+        return;
+      }
 
-    this.drawColourMap(
-      context,
-      this.specularMap,
-      Surface.SPECULAR_MAP_DEFAULT_COLOUR
-    );
+      this.drawColourMap(
+        context,
+        this.specularMap,
+        Surface.SPECULAR_MAP_DEFAULT_COLOUR
+      );
+    });
   }
 
   /**

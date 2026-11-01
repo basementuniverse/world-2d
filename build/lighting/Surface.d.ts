@@ -47,6 +47,13 @@ export declare abstract class Surface<Options extends SurfaceOptions> extends Sc
     specularMap: SceneImage | null;
     zIndex: number;
     customDraw: NonNullable<SurfaceOptions['customDraw']>;
+    /**
+     * World y-position where this surface stops, or null to show all of it
+     *
+     * The rest of the surface is hidden and doesn't receive any lighting, this is
+     * useful for something that's standing in water
+     */
+    clipBottom: number | null;
     protected overlays: DrawCallback[];
     private customMaskContext;
     /**
@@ -73,9 +80,22 @@ export declare abstract class Surface<Options extends SurfaceOptions> extends Sc
     addOverlay(draw: DrawCallback): () => void;
     draw(context: CanvasRenderingContext2D): void;
     /**
+     * The height of the part of this surface above `clipBottom`
+     */
+    get visibleHeight(): number;
+    /**
+     * Call a drawing function, keeping it inside the visible part of this surface
+     */
+    private drawVisible;
+    /**
      * Draw this surface without its overlays
      */
     drawContent(context: CanvasRenderingContext2D): void;
+    /**
+     * Draw the part of this surface that's hidden by `clipBottom`
+     */
+    drawHidden(context: CanvasRenderingContext2D): void;
+    private drawWholeSurface;
     protected drawColourMap(context: CanvasRenderingContext2D, image: SceneImage | null, defaultColour: string): void;
     drawNormalMap(context: CanvasRenderingContext2D): void;
     drawSpecularMap(context: CanvasRenderingContext2D): void;
