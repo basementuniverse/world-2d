@@ -1,6 +1,6 @@
-# Lighting and shadows in 2.5d
+# World 2D
 
-This is an experiment showing how to create a 2.5d scene with lighting and shadows.
+Lights, shadows, reflections, and water for 2.5d top-down 3/4-view games.
 
 ![Lighting and shadows in 2.5d](preview.png)
 
@@ -13,7 +13,7 @@ This is an experiment showing how to create a 2.5d scene with lighting and shado
 1. Clone this repository
 
 ```bash
-git clone https://github.com/basementuniverse/lighting-2d
+git clone https://github.com/basementuniverse/world-2d
 ```
 
 2. Install dependencies
@@ -59,7 +59,7 @@ A scene consists of ground, walls, actors, and lights. You add each of these to 
 First, we create a `LightingSystem`:
 
 ```ts
-import { LightingSystem } from 'lighting-2d';
+import { LightingSystem } from '@basementuniverse/world-2d';
 
 const lighting = new LightingSystem({
   ambientLightColour: '#555',
@@ -123,7 +123,7 @@ lighting.render(context, camera, context => {
 A `World` renders a scene using all of the systems that you give it. Each system draws its part of the frame without needing to know about the others, and the `World` decides the order.
 
 ```ts
-import { LightingSystem, ReflectionSystem, WaterSystem, World } from 'lighting-2d';
+import { LightingSystem, ReflectionSystem, WaterSystem, World } from '@basementuniverse/world-2d';
 
 const world = new World({
   lighting: new LightingSystem({ ambientLightColour: '#555' }),

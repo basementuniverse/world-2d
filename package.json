@@ -1,7 +1,7 @@
 {
-  "name": "lighting-2d",
+  "name": "@basementuniverse/world-2d",
   "version": "1.0.0",
-  "description": "2d lights and shadows for top-down 3/4 view games",
+  "description": "Lights, shadows, reflections, and water for top-down 3/4 view games",
   "main": "build/index.js",
   "scripts": {
     "build": "webpack && tsc -p tsconfig.lib.json",
@@ -10,6 +10,10 @@
   },
   "author": "Gordon Larrigan <gordonlarrigan@gmail.com> (https://gordonlarrigan.com)",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/basementuniverse/world-2d.git"
+  },
   "dependencies": {
     "@basementuniverse/camera": "^1.8.0",
     "@basementuniverse/parsecolor": "^1.0.2",

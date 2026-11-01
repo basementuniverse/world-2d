@@ -7,7 +7,7 @@ module.exports = {
     index: {
       import: './src/index.ts',
       library: {
-        name: 'Lighting2D',
+        name: 'BasementUniverseWorld2D',
         type: 'umd',
       },
     },

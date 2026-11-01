@@ -1,0 +1,7 @@
+t1 light height -0.35
+t2 highlight threshold 0.74
+t3 highlight offset 0.28 (whiteness of highlights, 0 uses light colour, 1 is white)
+t4 highlight alpha 1 (no effect)
+t5 shadow threshold 0.1
+t6 shadow amount 0 (undesirable effect, should be constant or omitted)
+t7 global alpha 0.7 (shadow amount)
