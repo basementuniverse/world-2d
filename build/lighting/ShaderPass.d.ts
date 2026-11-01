@@ -16,9 +16,11 @@ export type ShaderScene = {
     camera: SceneCamera;
     screen: vec2;
     lights: Light[];
+    allLights: Light[];
     surfaces: ShaderSurface[];
     normalMap: SceneImage | null;
     specularMap: SceneImage | null;
+    surfaceMapFilter: 'nearest' | 'linear';
     imageSmoothingEnabled: boolean;
     wallLightingYOffset: number;
     wallLightingCutoffDistance: number;
@@ -53,6 +55,10 @@ export declare class ShaderPass {
     private textures;
     private surfaceTarget;
     private specularTarget;
+    /**
+     * The gradient for each light only needs uploading when it changes
+     */
+    private lightTextures;
     constructor(context: GlContext);
     /**
      * The output of the most recent pass
@@ -67,6 +73,14 @@ export declare class ShaderPass {
      * Upload an image to one of the shared textures
      */
     private upload;
+    /**
+     * Bind a light's gradient, uploading it if it has changed
+     */
+    private bindLight;
+    /**
+     * Forget about textures for lights that have been removed
+     */
+    private releaseLights;
     /**
      * Make sure the output and the render targets match the screen size
      */

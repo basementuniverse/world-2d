@@ -507,7 +507,9 @@ export class World {
   private applyLighting(frame: Frame) {
     const { context, camera, screen } = frame;
 
-    if (this.lighting.options.lightingEnabled) {
+    const { lightingEnabled, surfaceMapsEnabled } = this.lighting.options;
+
+    if (lightingEnabled && surfaceMapsEnabled) {
       this.water?.drawLightingMaps(frame);
     }
 

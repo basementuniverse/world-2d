@@ -75,6 +75,11 @@ export class Light {
   public height: number;
   public castShadows: boolean;
 
+  /**
+   * This is changed whenever `lightCanvas` is redrawn
+   */
+  public lightMapVersion: number = 0;
+
   public lightCanvas: HTMLCanvasElement;
   private lightContext: CanvasRenderingContext2D;
 
@@ -257,6 +262,7 @@ export class Light {
 
   private prepareLightMap() {
     this.dirty = false;
+    this.lightMapVersion++;
     this.lightCanvas.width = this.lightCanvas.height = this._radius * 2;
 
     this.lightContext.save();

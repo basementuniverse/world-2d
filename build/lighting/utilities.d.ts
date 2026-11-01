@@ -18,6 +18,11 @@ export declare function sector1d(n: number, interval: Interval1d): Sector1d;
  */
 export declare function sector2d(point: vec2, interval: Interval2d): Sector2d;
 /**
+ * Get a copy of an image in a single colour which keeps the image's alpha
+ * channel, or null if the image hasn't loaded yet
+ */
+export declare function tintedImage(image: SceneImage, colour: string): HTMLCanvasElement | null;
+/**
  * Get a black copy of an image which keeps the image's alpha channel, or null
  * if the image hasn't loaded yet
  */

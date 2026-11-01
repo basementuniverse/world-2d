@@ -79,9 +79,9 @@ export declare class GlContext {
      */
     uploadData(unit: number, texture: WebGLTexture, size: vec2, data: Uint8Array, filter: number, repeat?: boolean): void;
     /**
-     * Bind an image, uploading it if we haven't seen it before
+     * Bind an image to `IMAGE_UNIT`, uploading it if we haven't seen it before
      */
-    bindImage(image: SceneImage, filter: number, unit?: number): void;
+    bindImage(image: SceneImage, filter: number): void;
     /**
      * Canvases might have changed since they were last used, so `bindImage()`
      * should upload them again

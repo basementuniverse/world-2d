@@ -70,6 +70,10 @@ const vec2 SECOND_LAYER_DIRECTION = vec2(-0.5, 0.86);
 // The direction that the water's own shading comes from
 const vec2 SHADING_DIRECTION = vec2(-0.6, -0.8);
 
+// Waves in water that's slower than this don't need to be moved, this is the
+// squared length of a flow vector
+const float MIN_FLOW = 0.00001;
+
 // How many normal map tiles each patch of noise covers
 const float NOISE_SCALE = 0.2;
 
@@ -145,6 +149,10 @@ vec2 layeredWaves(vec2 world) {
 // jumps back to the start. The noise stops all of the water from fading at the
 // same time, which would look like the water was pulsing.
 vec2 flowingWaves(vec2 world, vec2 flow) {
+  if (dot(flow, flow) < MIN_FLOW) {
+    return layeredWaves(world);
+  }
+
   float noise = texture2D(
     u_noiseMap,
     world / u_waveSize * NOISE_SCALE
@@ -181,6 +189,12 @@ void main() {
     discard;
   }
 
+  // The specular map only depends on the shape of the water
+  if (u_output == OUTPUT_SPECULAR) {
+    gl_FragColor = vec4(vec3(u_specular), alpha);
+    return;
+  }
+
   vec2 flow = decodeVector(texture2D(u_flowMap, uv).rg);
   vec2 slope = flowingWaves(world, flow) * u_waveStrength;
   if (u_useRipples > 0.5) {
@@ -195,11 +209,6 @@ void main() {
       normal.z * 0.5 + 0.5,
       alpha
     );
-    return;
-  }
-
-  if (u_output == OUTPUT_SPECULAR) {
-    gl_FragColor = vec4(vec3(u_specular), alpha);
     return;
   }
 

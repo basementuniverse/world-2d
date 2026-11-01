@@ -252,13 +252,9 @@ export class GlContext {
   }
 
   /**
-   * Bind an image, uploading it if we haven't seen it before
+   * Bind an image to `IMAGE_UNIT`, uploading it if we haven't seen it before
    */
-  public bindImage(
-    image: SceneImage,
-    filter: number,
-    unit: number = GlContext.IMAGE_UNIT
-  ) {
+  public bindImage(image: SceneImage, filter: number) {
     const gl = this.gl!;
 
     let texture = this.imageTextures.get(image);
@@ -268,7 +264,7 @@ export class GlContext {
       this.imageTextures.set(image, texture);
     }
 
-    this.bindTexture(unit, texture, filter);
+    this.bindTexture(GlContext.IMAGE_UNIT, texture, filter);
 
     const isStale =
       image instanceof HTMLCanvasElement && !this.uploadedCanvases.has(image);

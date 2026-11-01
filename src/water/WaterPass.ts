@@ -25,6 +25,9 @@ export enum WaterOutput {
 }
 
 type RegionTextures = {
+  mask: WebGLTexture;
+  maskImage: SceneImage | null;
+  maskVersion: number;
   depth: WebGLTexture;
   depthVersion: number;
   flow: WebGLTexture;
@@ -204,6 +207,7 @@ export class WaterPass {
     }
 
     const { gl } = this.context;
+    gl?.deleteTexture(textures.mask);
     gl?.deleteTexture(textures.depth);
     gl?.deleteTexture(textures.flow);
     gl?.deleteTexture(textures.ripples);
@@ -221,6 +225,9 @@ export class WaterPass {
     let textures = this.regionTextures.get(region);
     if (!textures) {
       textures = {
+        mask: gl.createTexture()!,
+        maskImage: null,
+        maskVersion: -1,
         depth: gl.createTexture()!,
         depthVersion: -1,
         flow: gl.createTexture()!,
@@ -264,11 +271,40 @@ export class WaterPass {
   }
 
   /**
+   * Masks can be canvases, but they don't change very often so they're only
+   * uploaded if we're told about a change
+   */
+  private bindMask(
+    region: WaterRegion,
+    textures: RegionTextures,
+    filter: number
+  ) {
+    const { mask, maskVersion } = region;
+    if (!mask) {
+      return;
+    }
+
+    if (textures.maskImage === mask && textures.maskVersion === maskVersion) {
+      this.context.bindTexture(TextureUnit.Mask, textures.mask, filter);
+    } else {
+      this.context.upload(TextureUnit.Mask, textures.mask, mask, filter);
+      textures.maskImage = mask;
+      textures.maskVersion = maskVersion;
+    }
+  }
+
+  /**
    * Make sure a region's textures are up to date and bind them
    */
-  private bindRegion(gl: WebGLRenderingContext, region: WaterRegion) {
+  private bindRegion(
+    gl: WebGLRenderingContext,
+    region: WaterRegion,
+    filter: number
+  ) {
     const textures = this.getTextures(gl, region);
     const { depthPixels, flowPixels, ripples } = region;
+
+    this.bindMask(region, textures, filter);
 
     if (textures.depthVersion === depthPixels.version) {
       this.context.bindTexture(TextureUnit.DepthMap, textures.depth, gl.LINEAR);
@@ -322,16 +358,11 @@ export class WaterPass {
     }
   }
 
-  private setRegionUniforms(
-    gl: WebGLRenderingContext,
-    region: WaterRegion,
-    frame: Frame
-  ) {
+  private setRegionUniforms(gl: WebGLRenderingContext, region: WaterRegion) {
     const { uniforms } = this.program;
     const colour = parseColor(region.colour);
     const deepColour = parseColor(region.deepColour);
     const { mask } = region;
-    const filter = frame.context.imageSmoothingEnabled ? gl.LINEAR : gl.NEAREST;
 
     gl.uniform2f(
       uniforms.u_regionPosition,
@@ -342,7 +373,6 @@ export class WaterPass {
     gl.uniform1f(uniforms.u_useMask, mask ? 1 : 0);
     gl.uniform1f(uniforms.u_useMaskRepeat, region.repeat ? 1 : 0);
     if (mask) {
-      this.context.bindImage(mask, filter, TextureUnit.Mask);
       gl.uniform2f(uniforms.u_maskSize, mask.width, mask.height);
     }
 
@@ -390,8 +420,12 @@ export class WaterPass {
     const size = vec2.sub(bottomRight, topLeft);
     const { uniforms } = this.program;
 
-    this.bindRegion(gl, region);
-    this.setRegionUniforms(gl, region, frame);
+    this.bindRegion(
+      gl,
+      region,
+      frame.context.imageSmoothingEnabled ? gl.LINEAR : gl.NEAREST
+    );
+    this.setRegionUniforms(gl, region);
     gl.uniform2f(uniforms.u_regionScreenPosition, topLeft.x, topLeft.y);
     gl.uniform1f(uniforms.u_cameraScale, size.x / region.size.x);
 
@@ -405,12 +439,20 @@ export class WaterPass {
 
   /**
    * Render some water into the canvas
+   *
+   * With a `scale` below 1 the output is smaller than the canvas, and it's in
+   * the bottom-left corner of the canvas
+   *
+   * `scene` is what's underneath the water, it can be a smaller copy of the
+   * frame's context
    */
   public render(
     frame: Frame,
     regions: WaterRegion[],
     output: WaterOutput,
-    time: number
+    time: number,
+    scale: number = 1,
+    scene: SceneImage = frame.context.canvas
   ) {
     const { gl } = this.context;
     if (!gl) {
@@ -421,9 +463,14 @@ export class WaterPass {
     const filter = frame.context.imageSmoothingEnabled ? gl.LINEAR : gl.NEAREST;
 
     this.context.resize(frame.screen);
-    this.context.invalidateCanvases();
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(
+      0,
+      0,
+      Math.ceil(frame.screen.x * scale),
+      Math.ceil(frame.screen.y * scale)
+    );
     gl.disable(gl.BLEND);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
@@ -433,7 +480,7 @@ export class WaterPass {
       this.context.upload(
         TextureUnit.Scene,
         this.sceneTexture,
-        frame.context.canvas,
+        scene,
         filter
       );
 
@@ -470,5 +517,7 @@ export class WaterPass {
     gl.uniform1i(uniforms.u_rippleMap, TextureUnit.RippleMap);
 
     regions.forEach(region => this.drawRegion(gl, region, frame));
+
+    gl.viewport(0, 0, frame.screen.x, frame.screen.y);
   }
 }

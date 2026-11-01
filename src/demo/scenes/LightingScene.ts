@@ -31,6 +31,7 @@ enum LightingSceneRenderMode {
 export class LightingScene extends Scene {
   private static readonly CAMERA_SPEED: number = 100;
   private static readonly CAMERA_INITIAL_POSITION: vec2 = vec2(1000, 600);
+  private static readonly EXPORT_FILE_NAME: string = 'scene.json';
 
   public camera: Camera;
   public lightingSystem: LightingSystem;
@@ -86,10 +87,10 @@ export class LightingScene extends Scene {
       .name('Load from local storage');
     Game.gui
       .add({ click: () => this.export() }, 'click')
-      .name('Export state to JSON');
+      .name('Export scene to a file');
     Game.gui
       .add({ click: () => this.import() }, 'click')
-      .name('Import state from JSON');
+      .name('Import scene from a file');
     Game.gui
       .add({ click: () => this.optimise() }, 'click')
       .name('Optimise geometry');
@@ -285,15 +286,37 @@ export class LightingScene extends Scene {
     this.load(data);
   }
 
+  /**
+   * Download the scene as a JSON file
+   */
   private export() {
-    console.log(this.save());
+    const url = URL.createObjectURL(
+      new Blob([this.save()], { type: 'application/json' })
+    );
+    const link = document.createElement('a');
+
+    link.href = url;
+    link.download = LightingScene.EXPORT_FILE_NAME;
+    link.click();
+
+    URL.revokeObjectURL(url);
   }
 
+  /**
+   * Ask for a JSON file and load a scene from it
+   */
   private import() {
-    const data = prompt('Paste state data here:');
-    if (data) {
-      this.load(data);
-    }
+    const input = document.createElement('input');
+
+    input.type = 'file';
+    input.accept = '.json,application/json';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (file) {
+        this.load(await file.text());
+      }
+    };
+    input.click();
   }
 
   private save(): string {

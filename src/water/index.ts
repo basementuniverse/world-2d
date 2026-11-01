@@ -7,3 +7,4 @@ export type {
   WaterSample,
 } from './WaterRegion';
 export { WaterSystem } from './WaterSystem';
+export type { WaterSystemOptions } from './WaterSystem';

@@ -1,4 +1,4 @@
-import { Frame, GlContext } from '../core';
+import { Frame, GlContext, SceneImage } from '../core';
 import type { WaterRegion } from './WaterRegion';
 /**
  * What the shader should output, these values are also in the shader
@@ -52,6 +52,11 @@ export declare class WaterPass {
      */
     private powerOfTwoImage;
     /**
+     * Masks can be canvases, but they don't change very often so they're only
+     * uploaded if we're told about a change
+     */
+    private bindMask;
+    /**
      * Make sure a region's textures are up to date and bind them
      */
     private bindRegion;
@@ -59,6 +64,12 @@ export declare class WaterPass {
     private drawRegion;
     /**
      * Render some water into the canvas
+     *
+     * With a `scale` below 1 the output is smaller than the canvas, and it's in
+     * the bottom-left corner of the canvas
+     *
+     * `scene` is what's underneath the water, it can be a smaller copy of the
+     * frame's context
      */
-    render(frame: Frame, regions: WaterRegion[], output: WaterOutput, time: number): void;
+    render(frame: Frame, regions: WaterRegion[], output: WaterOutput, time: number, scale?: number, scene?: SceneImage): void;
 }

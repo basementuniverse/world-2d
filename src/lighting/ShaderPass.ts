@@ -29,9 +29,11 @@ export type ShaderScene = {
   camera: SceneCamera;
   screen: vec2;
   lights: Light[];
+  allLights: Light[];
   surfaces: ShaderSurface[];
   normalMap: SceneImage | null;
   specularMap: SceneImage | null;
+  surfaceMapFilter: 'nearest' | 'linear';
   imageSmoothingEnabled: boolean;
   wallLightingYOffset: number;
   wallLightingCutoffDistance: number;
@@ -96,6 +98,14 @@ export class ShaderPass {
   private surfaceTarget: GlRenderTarget;
   private specularTarget: GlRenderTarget;
 
+  /**
+   * The gradient for each light only needs uploading when it changes
+   */
+  private lightTextures = new Map<
+    Light,
+    { texture: WebGLTexture; version: number }
+  >();
+
   public constructor(context: GlContext) {
     this.context = context;
     this.context.onInitialise(gl => this.initialise(gl));
@@ -140,6 +150,7 @@ export class ShaderPass {
     };
     this.surfaceTarget = this.context.createRenderTarget();
     this.specularTarget = this.context.createRenderTarget();
+    this.lightTextures = new Map();
 
     this.initialised = true;
   }
@@ -153,6 +164,41 @@ export class ShaderPass {
     filter: number
   ) {
     this.context.upload(unit, this.textures[unit], image, filter);
+  }
+
+  /**
+   * Bind a light's gradient, uploading it if it has changed
+   */
+  private bindLight(gl: WebGLRenderingContext, light: Light, filter: number) {
+    let cached = this.lightTextures.get(light);
+    if (!cached) {
+      cached = { texture: gl.createTexture()!, version: -1 };
+      this.lightTextures.set(light, cached);
+    }
+
+    if (cached.version === light.lightMapVersion) {
+      this.context.bindTexture(TextureUnit.LightMap, cached.texture, filter);
+    } else {
+      this.context.upload(
+        TextureUnit.LightMap,
+        cached.texture,
+        light.lightCanvas,
+        filter
+      );
+      cached.version = light.lightMapVersion;
+    }
+  }
+
+  /**
+   * Forget about textures for lights that have been removed
+   */
+  private releaseLights(gl: WebGLRenderingContext, lights: Set<Light>) {
+    this.lightTextures.forEach(({ texture }, light) => {
+      if (!lights.has(light)) {
+        gl.deleteTexture(texture);
+        this.lightTextures.delete(light);
+      }
+    });
   }
 
   /**
@@ -339,8 +385,11 @@ export class ShaderPass {
     this.resize(scene.screen);
     this.context.invalidateCanvases();
 
+    const surfaceMapFilter =
+      scene.surfaceMapFilter === 'linear' ? gl.LINEAR : gl.NEAREST;
+
     if (scene.normalMap) {
-      this.upload(TextureUnit.NormalMap, scene.normalMap, gl.NEAREST);
+      this.upload(TextureUnit.NormalMap, scene.normalMap, surfaceMapFilter);
     }
 
     // Each pixel of the surface map belongs to one surface, so there's no
@@ -388,7 +437,7 @@ export class ShaderPass {
     );
 
     if (scene.specularMap) {
-      this.upload(TextureUnit.SpecularMap, scene.specularMap, gl.NEAREST);
+      this.upload(TextureUnit.SpecularMap, scene.specularMap, surfaceMapFilter);
 
       const { uniforms } = this.specularProgram;
       this.setSceneUniforms(gl, this.specularProgram, scene);
@@ -404,9 +453,11 @@ export class ShaderPass {
 
     const filter = scene.imageSmoothingEnabled ? gl.LINEAR : gl.NEAREST;
 
+    this.releaseLights(gl, new Set(scene.allLights));
+
     gl.enable(gl.BLEND);
     for (const light of scene.lights) {
-      this.upload(TextureUnit.LightMap, light.lightCanvas, filter);
+      this.bindLight(gl, light, filter);
       this.upload(
         TextureUnit.RegionShadowMap,
         light.regionShadowCanvas,

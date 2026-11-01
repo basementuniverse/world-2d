@@ -83,13 +83,16 @@ export function sector2d(point: vec2, interval: Interval2d): Sector2d {
   }[x][y];
 }
 
-const silhouettes = new WeakMap<SceneImage, HTMLCanvasElement>();
+const tints = new WeakMap<SceneImage, Map<string, HTMLCanvasElement>>();
 
 /**
- * Get a black copy of an image which keeps the image's alpha channel, or null
- * if the image hasn't loaded yet
+ * Get a copy of an image in a single colour which keeps the image's alpha
+ * channel, or null if the image hasn't loaded yet
  */
-export function silhouette(image: SceneImage): HTMLCanvasElement | null {
+export function tintedImage(
+  image: SceneImage,
+  colour: string
+): HTMLCanvasElement | null {
   if (image.width === 0 || image.height === 0) {
     return null;
   }
@@ -98,7 +101,13 @@ export function silhouette(image: SceneImage): HTMLCanvasElement | null {
     return null;
   }
 
-  let result = silhouettes.get(image);
+  let imageTints = tints.get(image);
+  if (!imageTints) {
+    imageTints = new Map();
+    tints.set(image, imageTints);
+  }
+
+  let result = imageTints.get(colour);
   if (!result) {
     result = document.createElement('canvas');
     result.width = image.width;
@@ -107,11 +116,19 @@ export function silhouette(image: SceneImage): HTMLCanvasElement | null {
     const context = result.getContext('2d')!;
     context.drawImage(image, 0, 0);
     context.globalCompositeOperation = 'source-in';
-    context.fillStyle = 'black';
+    context.fillStyle = colour;
     context.fillRect(0, 0, result.width, result.height);
 
-    silhouettes.set(image, result);
+    imageTints.set(colour, result);
   }
 
   return result;
+}
+
+/**
+ * Get a black copy of an image which keeps the image's alpha channel, or null
+ * if the image hasn't loaded yet
+ */
+export function silhouette(image: SceneImage): HTMLCanvasElement | null {
+  return tintedImage(image, 'black');
 }

@@ -178,6 +178,10 @@ export declare class WaterRegion {
         data: Uint8Array;
         version: number;
     };
+    /**
+     * This is changed whenever the mask needs to be uploaded again
+     */
+    maskVersion: number;
     private system;
     private depthGrid;
     private shape;

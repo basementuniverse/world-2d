@@ -36,7 +36,9 @@ npm run start
 
 5. Open your browser and navigate to `http://localhost:8080`
 
-6. To view the sample scene (the one in the preview image), click "Import state from JSON" (in the menu, top-right) and paste in the contents of `samples/sample-scene-1.json`
+6. To view the sample scene (the one in the preview image), click "Import scene from a file" (in the menu, top-right) and choose `samples/sample-scene-1.json`
+
+"Export scene to a file" downloads the current scene as a JSON file, which can be imported in the same way.
 
 ## Project structure
 
@@ -198,10 +200,31 @@ If a `World` doesn't have a `ReflectionSystem` then these options are ignored, s
 Use an object for `reflectionSource` to change how something is reflected:
 
 * `footOffset: number` how far the object's feet are above the bottom of its image, set this if the image has empty space underneath the object
+* `floorOffset: number` how far to move the reflection up the screen, to close a gap between the object's feet and its reflection
+* `floorFade: number` the distance over which the reflection fades in from the feet, to hide any overlap with the object
+* `floorLayer: string` the layer in a sprite's animations with images for floor reflections, the default is `floor-reflection`
+* `floorImage: image` for actors that aren't sprites, an image to show in floors
 * `floor: boolean` should this appear in floors?
 * `wall: boolean` should this appear in walls? This is false by default for walls
 * `wallDirections: Record<string, string>` which way a sprite appears to be facing in a wall
 * `wallImage: image` for actors that aren't sprites, an image of the object's other side to show in walls
+
+Sprites in a 3/4 view can look strange when they're flipped upside-down, because we're seeing the top of the sprite where we should be seeing the underside. If this matters for a sprite then you can add a `floor-reflection` layer to its animations, with an image for each frame:
+
+```ts
+walk: {
+  left: {
+    name: 'walk',
+    frameCount: 2,
+    images: [walkLeft1, walkLeft2],
+    layers: {
+      'floor-reflection': [walkLeftFloor1, walkLeftFloor2],
+    },
+  },
+}
+```
+
+These images are flipped in the same way as the sprite, so it's easiest to start with a copy of each frame. Any animation or direction that doesn't have this layer uses the sprite instead, so it's only needed for the sprites and frames that need it.
 
 #### How reflections work
 
@@ -231,7 +254,7 @@ There are some limits to this:
 
 * Mirrors only show sources, they don't show the floor or the room.
 * Nothing blocks a reflection, so a source can appear in a mirror even if there's something between it and the mirror (unless that's drawn in front of the mirror).
-* If a sprite has to be drawn facing a different direction in a wall, then its `preRender` and `postRender` hooks won't be used for the reflection.
+* If a sprite is drawn with a `floor-reflection` image, or facing a different direction in a wall, then its `preRender` and `postRender` hooks won't be used for the reflection.
 
 If you aren't using a `World`, see `src/reflections/ReflectionSystem.ts` for the steps.
 
@@ -340,7 +363,23 @@ As well as the options above, these can be changed at any time on the object ret
 * `specular: number` how shiny the water is, this needs a `LightingSystem`. The size of highlights comes from `shaderShininess` on the `LightingSystem`
 * `pixelSize: number` snap the water to a grid of this size, for a pixel art style
 
-If you change the `mask` then call `region.invalidateMask()`. Regions shouldn't overlap each other.
+If you change the contents of the `mask` then call `region.invalidateMask()`. Regions shouldn't overlap each other.
+
+#### Performance
+
+Water has to copy the scene to the GPU and back again every frame, so most of its cost is proportional to the size of the screen. There are some options for this on the `WaterSystem`:
+
+```ts
+const water = new WaterSystem({
+  resolutionScale: 0.5,
+});
+```
+
+* `resolutionScale: number` the resolution of the water, this is the most effective option. If `pixelSize` is being used then this doesn't lose any detail as long as there's still at least one pixel for each `pixelSize`, for example 0.5 works well for a `pixelSize` of 1 and a camera scale of 2
+* `lightingMapScale: number` the resolution of the normal map that's given to the lighting system, the default is 0.5
+* `reflectionMapScale: number` the resolution of reflections in the water, the default is 0.5
+
+`surfaceMapScale` on the `LightingSystem` also helps, because water makes the normal map and specular map larger.
 
 If you aren't using a `World`, see `src/water/WaterSystem.ts` for the steps.
 
@@ -411,6 +450,8 @@ lighting.addLight({
 The red channel of a specular map sets how shiny each part of the surface is. A light's `height` controls how low the light is over a surface, so lower lights make normal maps look stronger.
 
 Set `surfaceMapsEnabled: false` on the `LightingSystem` to turn these off.
+
+These maps are drawn for the whole screen and uploaded to the GPU every frame, which takes a lot of time at high resolutions. If the camera is zoomed in then you can set `surfaceMapScale` to draw them at a lower resolution, for example 0.5 won't lose any detail with a camera scale of 2.
 
 ### Masks and shadows
 

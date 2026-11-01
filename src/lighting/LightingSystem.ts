@@ -67,6 +67,17 @@ export type LightingSystemOptions = {
   surfaceMapsEnabled: boolean;
 
   /**
+   * Resolution of the scene's normal map and specular map, compared to the
+   * resolution of the screen
+   *
+   * Uploading these maps takes up a lot of each frame, so lower values are
+   * faster. If the camera is zoomed in then this won't lose any detail as long
+   * as there's still at least one pixel for each pixel in the original images,
+   * for example 0.5 works well for a camera with a scale of 2
+   */
+  surfaceMapScale: number;
+
+  /**
    * Strength of highlights from normal maps
    */
   shaderHighlightStrength: number;
@@ -142,6 +153,7 @@ export class LightingSystem {
     softShadowsEnabled: false,
     softShadowsAmount: 2,
     surfaceMapsEnabled: true,
+    surfaceMapScale: 1,
     shaderHighlightStrength: 0.5,
     shaderShadowStrength: 0.5,
     shaderSpecularStrength: 1,
@@ -358,16 +370,47 @@ export class LightingSystem {
   /**
    * Make sure a screen-sized canvas matches the screen size and clear it
    */
-  private resetContext(context: CanvasRenderingContext2D) {
+  private resetContext(context: CanvasRenderingContext2D, scale: number = 1) {
     const { canvas } = context;
-    if (canvas.width !== this.screen.x || canvas.height !== this.screen.y) {
-      canvas.width = this.screen.x;
-      canvas.height = this.screen.y;
+    const width = Math.ceil(this.screen.x * scale);
+    const height = Math.ceil(this.screen.y * scale);
+
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
     } else {
-      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.clearRect(0, 0, width, height);
     }
 
     context.imageSmoothingEnabled = this.options.imageSmoothingEnabled;
+  }
+
+  /**
+   * Get a map ready for drawing surfaces in world coordinates, at the
+   * resolution of the scene's surface maps
+   */
+  private prepareSurfaceMap(
+    context: CanvasRenderingContext2D,
+    camera: SceneCamera
+  ) {
+    const { surfaceMapScale: scale } = this.options;
+
+    this.resetContext(context, scale);
+    context.save();
+    camera.setTransforms(context);
+
+    if (scale !== 1) {
+      const { a, b, c, d, e, f } = context.getTransform();
+
+      context.setTransform(
+        a * scale,
+        b * scale,
+        c * scale,
+        d * scale,
+        e * scale,
+        f * scale
+      );
+    }
   }
 
   /**
@@ -486,9 +529,14 @@ export class LightingSystem {
       camera,
       screen,
       lights: visibleLights,
+      allLights: this.lights,
       surfaces: this.calculateAmbientLights(surfaces),
       normalMap: hasNormalMaps ? this.sceneNormalMapCanvas : null,
       specularMap: hasSpecularMaps ? this.sceneSpecularMapCanvas : null,
+      surfaceMapFilter:
+        this.options.surfaceMapScale < 1 && this.options.imageSmoothingEnabled
+          ? 'linear'
+          : 'nearest',
       imageSmoothingEnabled: this.options.imageSmoothingEnabled,
       wallLightingYOffset: this.options.wallLightingYOffset,
       wallLightingCutoffDistance: this.options.wallLightingCutoffDistance,
@@ -623,9 +671,7 @@ export class LightingSystem {
    * Draw normal maps for surfaces in the scene
    */
   private drawSceneNormalMap(camera: SceneCamera, surfaces: Surface<any>[]) {
-    this.resetContext(this.sceneNormalMapContext);
-    this.sceneNormalMapContext.save();
-    camera.setTransforms(this.sceneNormalMapContext);
+    this.prepareSurfaceMap(this.sceneNormalMapContext, camera);
 
     surfaces.forEach(surface => {
       surface.drawNormalMap(this.sceneNormalMapContext);
@@ -641,9 +687,7 @@ export class LightingSystem {
     camera: SceneCamera,
     surfaces: Surface<any>[]
   ) {
-    this.resetContext(this.sceneSpecularMapContext);
-    this.sceneSpecularMapContext.save();
-    camera.setTransforms(this.sceneSpecularMapContext);
+    this.prepareSurfaceMap(this.sceneSpecularMapContext, camera);
 
     surfaces.forEach(surface => {
       surface.drawSpecularMap(this.sceneSpecularMapContext);

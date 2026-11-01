@@ -51,6 +51,10 @@ export declare class Light {
     private _intensity;
     height: number;
     castShadows: boolean;
+    /**
+     * This is changed whenever `lightCanvas` is redrawn
+     */
+    lightMapVersion: number;
     lightCanvas: HTMLCanvasElement;
     private lightContext;
     /**

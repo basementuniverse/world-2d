@@ -23,6 +23,33 @@ export type ReflectionSourceSettings = {
      */
     footOffset?: number;
     /**
+     * How far to move this source's reflection up the screen, this can be used
+     * to close the gap between an image's feet and its reflection
+     *
+     * This isn't used for reflections in water, which start at the waterline
+     */
+    floorOffset?: number;
+    /**
+     * The distance over which this source's reflection fades in, measured from
+     * the feet. This can be used to hide any overlap with the source
+     */
+    floorFade?: number;
+    /**
+     * The name of the layer in a sprite's animations that has images for floor
+     * reflections, the default is `floor-reflection`
+     *
+     * Images in a 3/4 view can look strange when they're flipped upside-down, so
+     * this can be used for images that are drawn for this purpose. These are
+     * flipped in the same way as the sprite. If an animation doesn't have an
+     * image in this layer then the sprite is used instead
+     */
+    floorLayer?: string;
+    /**
+     * The image to use in floors for an object that isn't a sprite, this is
+     * flipped in the same way as the object
+     */
+    floorImage?: SceneImage | null;
+    /**
      * Should this source appear in floors?
      */
     floor?: boolean;
@@ -55,10 +82,15 @@ export type ReflectionSourceOptions = ReflectionSourceSettings & ({
  * Something that appears in floors and walls that are reflective
  */
 export declare class ReflectionSource {
+    private static readonly DEFAULT_FLOOR_LAYER;
     private static readonly DEFAULT_WALL_DIRECTIONS;
     readonly sprite: Sprite | null;
     readonly object: ReflectionObject | null;
     footOffset: number;
+    floorOffset: number;
+    floorFade: number;
+    floorLayer: string;
+    floorImage: SceneImage | null;
     floor: boolean;
     wall: boolean;
     wallDirections: Record<string, string>;
@@ -86,6 +118,15 @@ export declare class ReflectionSource {
      */
     private get floorAxis();
     /**
+     * The world y-position where this source's reflection in a floor starts, this
+     * is the same as the line it's reflected around unless it has an offset
+     */
+    get floorStart(): number;
+    /**
+     * How far this source's reflection has been moved along the screen
+     */
+    private get floorShift();
+    /**
      * The area covered by this source when it's reflected in a floor
      */
     get floorBounds(): Rectangle;
@@ -108,7 +149,12 @@ export declare class ReflectionSource {
      * of this source that faces the wall
      */
     drawInWall(context: CanvasRenderingContext2D, wallFoot: number): void;
+    private drawFloorImage;
     private drawSpriteInWall;
+    /**
+     * Draw a sprite with a different image, in the same way as `Sprite.draw()`
+     */
+    private drawSpriteImage;
     private draw;
     /**
      * Remove this source from the reflection system

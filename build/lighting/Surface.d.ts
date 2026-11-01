@@ -97,6 +97,11 @@ export declare abstract class Surface<Options extends SurfaceOptions> extends Sc
     drawHidden(context: CanvasRenderingContext2D): void;
     private drawWholeSurface;
     protected drawColourMap(context: CanvasRenderingContext2D, image: SceneImage | null, defaultColour: string): void;
+    /**
+     * Fill the shape of this surface with a colour, so that a sprite doesn't
+     * cover the normal map or specular map of whatever's behind it
+     */
+    private fillShape;
     drawNormalMap(context: CanvasRenderingContext2D): void;
     drawSpecularMap(context: CanvasRenderingContext2D): void;
     /**

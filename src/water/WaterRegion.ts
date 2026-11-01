@@ -226,6 +226,11 @@ export class WaterRegion {
   public depthPixels: { size: vec2; data: Uint8Array; version: number };
   public flowPixels: { size: vec2; data: Uint8Array; version: number };
 
+  /**
+   * This is changed whenever the mask needs to be uploaded again
+   */
+  public maskVersion: number = 0;
+
   private system: WaterSystem;
   private depthGrid: WaterGrid<number> = [[1]];
   private shape: Uint8Array | null = null;
@@ -357,6 +362,7 @@ export class WaterRegion {
    */
   public invalidateMask() {
     this.shape = null;
+    this.maskVersion++;
   }
 
   /**

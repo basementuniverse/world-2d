@@ -31,6 +31,7 @@ const GRID_SCALE = 2;
  * and the east shore is a beach where the water fades out
  */
 export class WaterScene extends Scene {
+  private static readonly CAMERA_SCALE: number = 2;
   private static readonly HERO_MAX_DEPTH: number = 22;
   private static readonly SPLASH = { radius: 8, strength: 1.5 };
 
@@ -48,7 +49,7 @@ export class WaterScene extends Scene {
       scaleEaseAmount: 0.95,
     });
     this.camera.positionImmediate = vec2(224, 160);
-    this.camera.scaleImmediate = 2;
+    this.camera.scaleImmediate = WaterScene.CAMERA_SCALE;
 
     this.world = new World({
       lighting: new LightingSystem({
@@ -57,9 +58,10 @@ export class WaterScene extends Scene {
         ambientLightColour: '#aaa',
         shaderBanding: 0,
         shaderShininess: 96,
+        surfaceMapScale: 1 / WaterScene.CAMERA_SCALE,
       }),
       reflections: new ReflectionSystem(),
-      water: new WaterSystem(),
+      water: new WaterSystem({ resolutionScale: 1 / WaterScene.CAMERA_SCALE }),
     });
 
     this.createTerrain();
@@ -74,7 +76,7 @@ export class WaterScene extends Scene {
     this.world.addActor({
       sprite: this.hero.sprite,
       shadow: 'none',
-      reflectionSource: { footOffset: Hero.FOOT_OFFSET },
+      reflectionSource: Hero.REFLECTION,
       submersible: {
         maxDepth: WaterScene.HERO_MAX_DEPTH,
         footOffset: Hero.FOOT_OFFSET,

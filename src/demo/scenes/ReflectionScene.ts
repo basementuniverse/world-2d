@@ -48,7 +48,7 @@ export class ReflectionScene extends Scene {
     this.world.addActor({
       sprite: this.hero.sprite,
       shadow: 'none',
-      reflectionSource: { footOffset: Hero.FOOT_OFFSET },
+      reflectionSource: Hero.REFLECTION,
     });
 
     this.createRoom();

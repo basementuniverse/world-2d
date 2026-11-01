@@ -28,6 +28,37 @@ export type ReflectionSourceSettings = {
   footOffset?: number;
 
   /**
+   * How far to move this source's reflection up the screen, this can be used
+   * to close the gap between an image's feet and its reflection
+   *
+   * This isn't used for reflections in water, which start at the waterline
+   */
+  floorOffset?: number;
+
+  /**
+   * The distance over which this source's reflection fades in, measured from
+   * the feet. This can be used to hide any overlap with the source
+   */
+  floorFade?: number;
+
+  /**
+   * The name of the layer in a sprite's animations that has images for floor
+   * reflections, the default is `floor-reflection`
+   *
+   * Images in a 3/4 view can look strange when they're flipped upside-down, so
+   * this can be used for images that are drawn for this purpose. These are
+   * flipped in the same way as the sprite. If an animation doesn't have an
+   * image in this layer then the sprite is used instead
+   */
+  floorLayer?: string;
+
+  /**
+   * The image to use in floors for an object that isn't a sprite, this is
+   * flipped in the same way as the object
+   */
+  floorImage?: SceneImage | null;
+
+  /**
    * Should this source appear in floors?
    */
   floor?: boolean;
@@ -62,6 +93,7 @@ export type ReflectionSourceOptions = ReflectionSourceSettings &
  * Something that appears in floors and walls that are reflective
  */
 export class ReflectionSource {
+  private static readonly DEFAULT_FLOOR_LAYER = 'floor-reflection';
   private static readonly DEFAULT_WALL_DIRECTIONS: Record<string, string> = {
     north: 'south',
     south: 'north',
@@ -73,6 +105,10 @@ export class ReflectionSource {
   public readonly object: ReflectionObject | null;
 
   public footOffset: number;
+  public floorOffset: number;
+  public floorFade: number;
+  public floorLayer: string;
+  public floorImage: SceneImage | null;
   public floor: boolean;
   public wall: boolean;
   public wallDirections: Record<string, string>;
@@ -97,6 +133,11 @@ export class ReflectionSource {
     this.sprite = 'sprite' in options ? options.sprite : null;
     this.object = 'object' in options ? options.object : null;
     this.footOffset = options.footOffset ?? 0;
+    this.floorOffset = options.floorOffset ?? 0;
+    this.floorFade = options.floorFade ?? 0;
+    this.floorLayer =
+      options.floorLayer ?? ReflectionSource.DEFAULT_FLOOR_LAYER;
+    this.floorImage = options.floorImage ?? null;
     this.floor = options.floor ?? true;
     this.wall = options.wall ?? true;
     this.wallDirections =
@@ -128,13 +169,33 @@ export class ReflectionSource {
   }
 
   /**
+   * The world y-position where this source's reflection in a floor starts, this
+   * is the same as the line it's reflected around unless it has an offset
+   */
+  public get floorStart(): number {
+    return this.waterline === null
+      ? this.floorAxis - this.floorOffset
+      : this.floorAxis;
+  }
+
+  /**
+   * How far this source's reflection has been moved along the screen
+   */
+  private get floorShift(): number {
+    return this.floorStart - this.floorAxis;
+  }
+
+  /**
    * The area covered by this source when it's reflected in a floor
    */
   public get floorBounds(): Rectangle {
     const { position, size } = this.bounds;
 
     return {
-      position: vec2(position.x, this.floorAxis * 2 - (position.y + size.y)),
+      position: vec2(
+        position.x,
+        this.floorAxis * 2 + this.floorShift - (position.y + size.y)
+      ),
       size,
     };
   }
@@ -159,7 +220,7 @@ export class ReflectionSource {
    */
   public drawInFloor(context: CanvasRenderingContext2D) {
     context.save();
-    context.translate(0, this.floorAxis * 2);
+    context.translate(0, this.floorAxis * 2 + this.floorShift);
     context.scale(1, -1);
 
     if (this.waterline !== null) {
@@ -175,7 +236,7 @@ export class ReflectionSource {
       context.clip();
     }
 
-    this.draw(context);
+    this.drawFloorImage(context);
     context.restore();
   }
 
@@ -209,6 +270,27 @@ export class ReflectionSource {
     context.restore();
   }
 
+  private drawFloorImage(context: CanvasRenderingContext2D) {
+    const { sprite, floorImage } = this;
+
+    if (sprite) {
+      const image =
+        sprite.image && sprite.getImage(undefined, this.floorLayer);
+
+      if (image) {
+        this.drawSpriteImage(context, sprite, image);
+        return;
+      }
+    } else if (floorImage) {
+      const { position, size } = this.bounds;
+
+      context.drawImage(floorImage, position.x, position.y, size.x, size.y);
+      return;
+    }
+
+    this.draw(context);
+  }
+
   private drawSpriteInWall(context: CanvasRenderingContext2D, sprite: Sprite) {
     const direction =
       this.wallDirections[sprite.direction] ?? sprite.direction;
@@ -220,10 +302,19 @@ export class ReflectionSource {
     }
 
     const image = sprite.getImage(direction);
-    if (!image) {
-      return;
+    if (image) {
+      this.drawSpriteImage(context, sprite, image);
     }
+  }
 
+  /**
+   * Draw a sprite with a different image, in the same way as `Sprite.draw()`
+   */
+  private drawSpriteImage(
+    context: CanvasRenderingContext2D,
+    sprite: Sprite,
+    image: SceneImage
+  ) {
     context.translate(sprite.position.x, sprite.position.y);
     context.scale(sprite.scale, sprite.scale);
     context.rotate(sprite.rotation);

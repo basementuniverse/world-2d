@@ -2,6 +2,7 @@ import { vec2 } from '@basementuniverse/vec';
 import { boundingRectangle, drawImageInRectangle, SceneImage } from '../core';
 import type { LightingSystem } from './LightingSystem';
 import { SceneObject, SceneObjectOptions } from './SceneObject';
+import { tintedImage } from './utilities';
 
 type DrawCallback = (context: CanvasRenderingContext2D) => void;
 
@@ -209,10 +210,28 @@ export abstract class Surface<
     if (image) {
       this.drawImage(context, image);
     } else {
-      this.fillBackground(context, defaultColour);
+      this.fillShape(context, defaultColour);
     }
 
     context.restore();
+  }
+
+  /**
+   * Fill the shape of this surface with a colour, so that a sprite doesn't
+   * cover the normal map or specular map of whatever's behind it
+   */
+  private fillShape(context: CanvasRenderingContext2D, colour: string) {
+    const mask = this.customDraw.mask ? 'solid' : this.getMask();
+
+    if (mask === 'solid') {
+      this.fillBackground(context, colour);
+      return;
+    }
+
+    const shape = mask && tintedImage(mask, colour);
+    if (shape) {
+      this.drawImage(context, shape);
+    }
   }
 
   public drawNormalMap(context: CanvasRenderingContext2D) {

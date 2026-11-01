@@ -27,6 +27,7 @@ export declare class ReflectionSystem {
     private floorSourcesContext;
     floorSourcesCanvas: HTMLCanvasElement;
     private floorContext;
+    private fadeContext;
     private wallContext;
     private frame;
     private floorSourcesReady;
@@ -54,6 +55,11 @@ export declare class ReflectionSystem {
      * Make sure `floorSourcesCanvas` is up to date for this frame
      */
     drawFloorSources(): HTMLCanvasElement;
+    /**
+     * Draw a source's reflection on its own so that it can fade in without
+     * affecting the reflections that have already been drawn
+     */
+    private drawFadedSource;
     /**
      * Make sure a screen-sized context matches the frame and clear it, ready for
      * drawing in world coordinates

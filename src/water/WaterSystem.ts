@@ -3,7 +3,10 @@ import {
   Frame,
   GlContext,
   intervalToRectangle,
+  maxVec,
+  minVec,
   rectanglesIntersect,
+  SceneImage,
 } from '../core';
 import { RippleOptions } from './RippleField';
 import { WaterOutput, WaterPass } from './WaterPass';
@@ -12,6 +15,32 @@ import {
   WaterRegionOptions,
   WaterSample,
 } from './WaterRegion';
+
+export type WaterSystemOptions = {
+  /**
+   * The resolution of the water, compared to the resolution of the screen
+   *
+   * This is the most effective way of making water faster. If `pixelSize` is
+   * being used then neighbouring pixels are already the same, so this won't
+   * lose any detail as long as there's still at least one pixel for each
+   * `pixelSize`, for example 0.5 works well for a `pixelSize` of 1 and a camera
+   * with a scale of 2
+   */
+  resolutionScale: number;
+
+  /**
+   * The resolution of the normal map that's given to the lighting system,
+   * compared to the resolution of the screen. Lower values are faster
+   */
+  lightingMapScale: number;
+
+  /**
+   * The resolution of the reflections in the water, compared to the resolution
+   * of the screen. Waves hide most of the difference and lower values are
+   * faster
+   */
+  reflectionMapScale: number;
+};
 
 /**
  * Renders water
@@ -26,9 +55,17 @@ import {
  * 4. Draw everything that's on top of the water
  */
 export class WaterSystem {
+  private static readonly DEFAULT_OPTIONS: WaterSystemOptions = {
+    resolutionScale: 1,
+    lightingMapScale: 0.5,
+    reflectionMapScale: 0.5,
+  };
+
   private static createContext(): CanvasRenderingContext2D {
     return document.createElement('canvas').getContext('2d')!;
   }
+
+  public options: WaterSystemOptions;
 
   private regions: WaterRegion[] = [];
   private glContext: GlContext | null;
@@ -45,11 +82,24 @@ export class WaterSystem {
   private specularMapContext = WaterSystem.createContext();
   public specularMapCanvas = this.specularMapContext.canvas;
 
+  private reflectionMapContext = WaterSystem.createContext();
+  private sceneContext = WaterSystem.createContext();
+
+  /**
+   * What the specular map was drawn from, so that we only draw it again if
+   * something has changed
+   */
+  private specularMapKey: string = '';
+
   /**
    * `glContext` lets the water system share a WebGL context with other systems,
    * otherwise it will create its own
    */
-  public constructor(glContext?: GlContext) {
+  public constructor(
+    options?: Partial<WaterSystemOptions>,
+    glContext?: GlContext
+  ) {
+    this.options = { ...WaterSystem.DEFAULT_OPTIONS, ...options };
     this.glContext = glContext ?? null;
   }
 
@@ -137,12 +187,100 @@ export class WaterSystem {
       return;
     }
 
-    pass.render(frame, regions, WaterOutput.Colour, this.time);
+    const { resolutionScale: scale, reflectionMapScale } = this.options;
 
-    frame.context.save();
-    frame.context.setTransform(1, 0, 0, 1, 0, 0);
-    frame.context.drawImage(pass.canvas, 0, 0);
-    frame.context.restore();
+    pass.render(
+      {
+        ...frame,
+        reflectionMap:
+          frame.reflectionMap &&
+          this.scaledCopy(
+            this.reflectionMapContext,
+            frame.reflectionMap,
+            frame,
+            reflectionMapScale
+          ),
+      },
+      regions,
+      WaterOutput.Colour,
+      this.time,
+      scale,
+
+      // Water with a low resolution doesn't need any more detail than this
+      this.scaledCopy(this.sceneContext, frame.context.canvas, frame, scale)
+    );
+
+    this.copyWater(pass, frame, regions, scale);
+  }
+
+  /**
+   * Copy the water onto the frame's context, the rest of the output of the pass
+   * is empty so we only need to copy the area that the water covers
+   */
+  private copyWater(
+    pass: WaterPass,
+    { context, camera, screen }: Frame,
+    regions: WaterRegion[],
+    scale: number
+  ) {
+    const corners = regions.flatMap(({ position, size }) => [
+      camera.worldToScreen(position),
+      camera.worldToScreen(vec2.add(position, size)),
+    ]);
+    const left = Math.max(Math.floor(minVec(...corners).x), 0);
+    const top = Math.max(Math.floor(minVec(...corners).y), 0);
+    const right = Math.min(Math.ceil(maxVec(...corners).x), screen.x);
+    const bottom = Math.min(Math.ceil(maxVec(...corners).y), screen.y);
+
+    const outputWidth = Math.ceil(screen.x * scale);
+    const outputHeight = Math.ceil(screen.y * scale);
+    const scaleX = outputWidth / screen.x;
+    const scaleY = outputHeight / screen.y;
+
+    context.save();
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.drawImage(
+      pass.canvas,
+      left * scaleX,
+      screen.y - outputHeight + top * scaleY,
+      (right - left) * scaleX,
+      (bottom - top) * scaleY,
+      left,
+      top,
+      right - left,
+      bottom - top
+    );
+    context.restore();
+  }
+
+  /**
+   * Make a smaller copy of a screen-sized image, uploading these is much faster
+   */
+  private scaledCopy(
+    context: CanvasRenderingContext2D,
+    image: SceneImage,
+    frame: Frame,
+    scale: number
+  ): SceneImage {
+    if (scale === 1) {
+      return image;
+    }
+
+    const { canvas } = context;
+    const width = Math.ceil(frame.screen.x * scale);
+    const height = Math.ceil(frame.screen.y * scale);
+
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+    } else {
+      context.clearRect(0, 0, width, height);
+    }
+
+    context.imageSmoothingEnabled = frame.context.imageSmoothingEnabled;
+    context.drawImage(image, 0, 0, width, height);
+
+    return canvas;
   }
 
   /**
@@ -155,16 +293,70 @@ export class WaterSystem {
       return;
     }
 
-    for (const [context, output] of [
-      [this.normalMapContext, WaterOutput.Normal],
-      [this.specularMapContext, WaterOutput.Specular],
-    ] as const) {
-      pass.render(frame, regions, output, this.time);
+    const { lightingMapScale } = this.options;
 
-      context.canvas.width = frame.screen.x;
-      context.canvas.height = frame.screen.y;
-      context.drawImage(pass.canvas, 0, 0);
+    pass.render(
+      frame,
+      regions,
+      WaterOutput.Normal,
+      this.time,
+      lightingMapScale
+    );
+    this.copyLightingMap(this.normalMapContext, pass, frame, lightingMapScale);
+
+    // The specular map is the same every frame unless something has moved
+    const key = JSON.stringify([
+      frame.camera.bounds,
+      frame.screen,
+      regions.map(region => [
+        region.position,
+        region.size,
+        region.specular,
+        region.shoreBlend,
+        region.depthPixels.version,
+        region.maskVersion,
+      ]),
+    ]);
+
+    if (key !== this.specularMapKey) {
+      this.specularMapKey = key;
+
+      pass.render(frame, regions, WaterOutput.Specular, this.time);
+      this.copyLightingMap(this.specularMapContext, pass, frame, 1);
     }
+  }
+
+  /**
+   * Copy the output of a pass that used part of the canvas
+   */
+  private copyLightingMap(
+    context: CanvasRenderingContext2D,
+    pass: WaterPass,
+    { screen }: Frame,
+    scale: number
+  ) {
+    const { canvas } = context;
+    const width = Math.ceil(screen.x * scale);
+    const height = Math.ceil(screen.y * scale);
+
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+    } else {
+      context.clearRect(0, 0, width, height);
+    }
+
+    context.drawImage(
+      pass.canvas,
+      0,
+      screen.y - height,
+      width,
+      height,
+      0,
+      0,
+      width,
+      height
+    );
   }
 
   /**
@@ -187,8 +379,8 @@ export class WaterSystem {
     );
     const left = Math.max(Math.floor(topLeft.x), 0);
     const top = Math.max(Math.floor(topLeft.y), 0);
-    const right = Math.min(Math.ceil(bottomRight.x), map.width);
-    const bottom = Math.min(Math.ceil(bottomRight.y), map.height);
+    const right = Math.min(Math.ceil(bottomRight.x), frame.screen.x);
+    const bottom = Math.min(Math.ceil(bottomRight.y), frame.screen.y);
     const width = right - left;
     const height = bottom - top;
 
@@ -196,9 +388,23 @@ export class WaterSystem {
       return;
     }
 
+    // Both of these can have a lower resolution than the screen
+    const sourceScale = map.width / frame.screen.x;
+    const targetScale = context.canvas.width / frame.screen.x;
+
     context.save();
     context.setTransform(1, 0, 0, 1, 0, 0);
-    context.drawImage(map, left, top, width, height, left, top, width, height);
+    context.drawImage(
+      map,
+      left * sourceScale,
+      top * sourceScale,
+      width * sourceScale,
+      height * sourceScale,
+      left * targetScale,
+      top * targetScale,
+      width * targetScale,
+      height * targetScale
+    );
     context.restore();
   }
 

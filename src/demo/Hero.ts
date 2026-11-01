@@ -23,6 +23,16 @@ const INPUT_KEYS: Record<string, string[]> = {
 export class Hero {
   public static readonly FOOT_OFFSET: number = 6;
 
+  /**
+   * The character's feet are slightly above the shadow in the image, so this
+   * moves its reflection up and hides the overlap
+   */
+  public static readonly REFLECTION = {
+    footOffset: Hero.FOOT_OFFSET,
+    floorOffset: 3,
+    floorFade: 4,
+  };
+
   private static readonly SPEED: number = 90;
   private static readonly ORIGIN: vec2 = vec2(25, 44);
   private static readonly FRAME_RATE: number = 8;

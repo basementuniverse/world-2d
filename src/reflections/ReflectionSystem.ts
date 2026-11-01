@@ -1,3 +1,4 @@
+import { vec2 } from '@basementuniverse/vec';
 import {
   Frame,
   intervalToRectangle,
@@ -44,6 +45,7 @@ export class ReflectionSystem {
   public floorSourcesCanvas = this.floorSourcesContext.canvas;
 
   private floorContext = ReflectionSystem.createContext();
+  private fadeContext = ReflectionSystem.createContext();
   private wallContext = ReflectionSystem.createContext();
 
   private frame: Frame | null = null;
@@ -118,10 +120,74 @@ export class ReflectionSystem {
     );
 
     this.resetContext(this.floorSourcesContext, frame);
-    sources.forEach(source => source.drawInFloor(this.floorSourcesContext));
+    if (sources.some(source => source.floorFade > 0)) {
+      this.resetContext(this.fadeContext, frame);
+    }
+
+    sources.forEach(source => {
+      if (source.floorFade > 0) {
+        this.drawFadedSource(source, frame);
+      } else {
+        source.drawInFloor(this.floorSourcesContext);
+      }
+    });
     this.floorSourcesReady = true;
 
     return this.floorSourcesCanvas;
+  }
+
+  /**
+   * Draw a source's reflection on its own so that it can fade in without
+   * affecting the reflections that have already been drawn
+   */
+  private drawFadedSource(source: ReflectionSource, frame: Frame) {
+    const context = this.fadeContext;
+    const { position, size } = source.floorBounds;
+    const start = source.floorStart;
+
+    source.drawInFloor(context);
+
+    const fade = context.createLinearGradient(
+      0,
+      start,
+      0,
+      start + source.floorFade
+    );
+    fade.addColorStop(0, 'black');
+    fade.addColorStop(1, 'transparent');
+
+    context.globalCompositeOperation = 'destination-out';
+    context.fillStyle = fade;
+    context.fillRect(position.x, start, size.x, source.floorFade);
+    context.globalCompositeOperation = 'source-over';
+
+    // Only the area around this source needs to be copied and cleared
+    const topLeft = frame.camera.worldToScreen(position);
+    const bottomRight = frame.camera.worldToScreen(vec2.add(position, size));
+    const left = Math.floor(topLeft.x);
+    const top = Math.floor(topLeft.y);
+    const width = Math.ceil(bottomRight.x) - left;
+    const height = Math.ceil(bottomRight.y) - top;
+
+    this.floorSourcesContext.save();
+    this.floorSourcesContext.setTransform(1, 0, 0, 1, 0, 0);
+    this.floorSourcesContext.drawImage(
+      context.canvas,
+      left,
+      top,
+      width,
+      height,
+      left,
+      top,
+      width,
+      height
+    );
+    this.floorSourcesContext.restore();
+
+    context.save();
+    context.setTransform(1, 0, 0, 1, 0, 0);
+    context.clearRect(left, top, width, height);
+    context.restore();
   }
 
   /**

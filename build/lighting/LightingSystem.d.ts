@@ -37,6 +37,16 @@ export type LightingSystemOptions = {
      */
     surfaceMapsEnabled: boolean;
     /**
+     * Resolution of the scene's normal map and specular map, compared to the
+     * resolution of the screen
+     *
+     * Uploading these maps takes up a lot of each frame, so lower values are
+     * faster. If the camera is zoomed in then this won't lose any detail as long
+     * as there's still at least one pixel for each pixel in the original images,
+     * for example 0.5 works well for a camera with a scale of 2
+     */
+    surfaceMapScale: number;
+    /**
      * Strength of highlights from normal maps
      */
     shaderHighlightStrength: number;
@@ -188,6 +198,11 @@ export declare class LightingSystem {
      * Make sure a screen-sized canvas matches the screen size and clear it
      */
     private resetContext;
+    /**
+     * Get a map ready for drawing surfaces in world coordinates, at the
+     * resolution of the scene's surface maps
+     */
+    private prepareSurfaceMap;
     /**
      * Render a lit scene onto a context
      *
