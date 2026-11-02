@@ -40,6 +40,15 @@ export type WaterSystemOptions = {
    * faster
    */
   reflectionMapScale: number;
+
+  /**
+   * The size of each cell in the depth and flow grids, in world units
+   *
+   * Every region uses cells of this size, `gridSize()` will find the number of
+   * cells that a region needs. Lower values allow more detail but use more
+   * memory, and grids that have a different size are stretched to fit
+   */
+  gridCellSize: number;
 };
 
 /**
@@ -59,6 +68,7 @@ export class WaterSystem {
     resolutionScale: 1,
     lightingMapScale: 0.5,
     reflectionMapScale: 0.5,
+    gridCellSize: 8,
   };
 
   private static createContext(): CanvasRenderingContext2D {
@@ -127,6 +137,19 @@ export class WaterSystem {
   public remove(region: WaterRegion) {
     this.regions = this.regions.filter(r => r !== region);
     this.pass?.release(region);
+  }
+
+  /**
+   * Find the number of columns and rows in a grid that covers an area of this
+   * size, the cells are stretched to fit if the size isn't a multiple of
+   * `gridCellSize`
+   */
+  public gridSize(size: vec2): vec2 {
+    const { gridCellSize } = this.options;
+
+    return vec2.map(size, length =>
+      Math.max(Math.ceil(length / gridCellSize), 1)
+    );
   }
 
   /**

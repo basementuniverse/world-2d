@@ -118,7 +118,9 @@ export abstract class EditorActor implements Actor {
   }
 
   public update(dt: number) {
-    const mouseDown = InputManager.mouseDown(InputManager.MouseButton.Left);
+    const mouseDown =
+      InputManager.mouseDown(InputManager.MouseButton.Left) &&
+      !this.scene.painter.active;
     const mouseWorldPosition = this.scene.camera.screenToWorld(
       InputManager.mousePosition
     );

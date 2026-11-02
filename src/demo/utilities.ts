@@ -1,4 +1,4 @@
-import { clamp, floatEquals } from '@basementuniverse/utils';
+import { clamp, floatEquals, lerp } from '@basementuniverse/utils';
 import { vec2 } from '@basementuniverse/vec';
 import {
   Interval1d,
@@ -20,6 +20,52 @@ export function clampVec(v: vec2, min: vec2, max: vec2): vec2 {
  */
 export function quantizeVec(v: vec2, quant: number): vec2 {
   return vec2.map(v, n => Math.round(n / quant) * quant);
+}
+
+/**
+ * Linear interpolate between 2 vectors
+ */
+export function lerpVec(a: vec2, b: vec2, i: number): vec2 {
+  return vec2(lerp(a.x, b.x, i), lerp(a.y, b.y, i));
+}
+
+/**
+ * Change the number of cells in a grid, values are interpolated between the
+ * centers of the cells in the same way that a texture would
+ *
+ * This returns the same grid if it's already the right size
+ */
+export function resampleGrid<T>(
+  grid: T[][],
+  size: vec2,
+  mix: (a: T, b: T, i: number) => T
+): T[][] {
+  const rows = grid.length;
+  const columns = grid[0].length;
+  if (rows === size.y && columns === size.x) {
+    return grid;
+  }
+
+  const sourceCell = (cell: number, from: number, to: number) =>
+    clamp(((cell + 0.5) / to) * from - 0.5, 0, from - 1);
+
+  return Array.from({ length: size.y }, (_, row) => {
+    const v = sourceCell(row, rows, size.y);
+    const top = Math.floor(v);
+    const bottom = Math.min(top + 1, rows - 1);
+
+    return Array.from({ length: size.x }, (_, column) => {
+      const u = sourceCell(column, columns, size.x);
+      const left = Math.floor(u);
+      const right = Math.min(left + 1, columns - 1);
+
+      return mix(
+        mix(grid[top][left], grid[top][right], u - left),
+        mix(grid[bottom][left], grid[bottom][right], u - left),
+        v - top
+      );
+    });
+  });
 }
 
 /**

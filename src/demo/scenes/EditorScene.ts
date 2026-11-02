@@ -22,6 +22,7 @@ import * as constants from '../constants';
 import Game from '../Game';
 import { addColour, clearFolder } from '../gui';
 import { quantizeVec, sortActors } from '../utilities';
+import { WaterPainter } from '../WaterPainter';
 
 enum EditorRenderMode {
   NoLighting = 'nolighting',
@@ -170,6 +171,8 @@ export class EditorScene extends Scene {
    */
   public reflectionStrength = { floor: 1, wall: 1, water: 1 };
 
+  public painter: WaterPainter;
+
   private actors: EditorActor[] = [];
   private selected: EditorActor | null = null;
   private selectedFolder: dat.GUI;
@@ -205,6 +208,7 @@ export class EditorScene extends Scene {
       reflections: new ReflectionSystem(),
       water: new WaterSystem(),
     });
+    this.painter = new WaterPainter(this.world.water!);
     this.defaultSettings = JSON.parse(JSON.stringify(this.settings()));
 
     // GUI controls
@@ -215,6 +219,7 @@ export class EditorScene extends Scene {
 
     this.createSceneControls();
     this.createElementControls();
+    this.painter.createControls(Game.gui.addFolder('Paint water'));
     this.selectedFolder = Game.gui.addFolder('Selected');
     this.createLightingControls();
     this.createReflectionControls();
@@ -327,6 +332,7 @@ export class EditorScene extends Scene {
     folder
       .add(options, 'lightingMapScale', 0.25, 1, 0.05)
       .name('Lighting map scale');
+    folder.add(options, 'gridCellSize', 4, 64, 1).name('Grid cell size');
   }
 
   private create(element: ElementType, position: vec2) {
@@ -392,6 +398,14 @@ export class EditorScene extends Scene {
       .name('Duplicate');
     folder.add({ click: () => this.remove(actor) }, 'click').name('Delete');
     folder.open();
+  }
+
+  /**
+   * Show the controls for the selected element again, this is for elements with
+   * controls that depend on what has happened to them
+   */
+  public refreshSelected() {
+    this.select(this.selected);
   }
 
   private optimise() {
@@ -590,6 +604,7 @@ export class EditorScene extends Scene {
       Debug.value('Hold SHIFT to snap to grid', '');
       Debug.value('Use WASD to move characters', '');
       Debug.value('Right click on water to make a splash', '');
+      Debug.value('Drag on water to paint if a paint mode is on', '');
     }
 
     // Handle camera move
@@ -626,7 +641,11 @@ export class EditorScene extends Scene {
     this.actors.forEach(actor => actor.update(dt));
     this.world.update(dt);
 
-    this.handleSelect();
+    if (this.painter.active) {
+      this.painter.update(this.camera, this.waterActors());
+    } else {
+      this.handleSelect();
+    }
 
     if (InputManager.keyDown('ShiftLeft')) {
       // Handle item create
@@ -657,6 +676,12 @@ export class EditorScene extends Scene {
     }
 
     this.selectedFolder.updateDisplay();
+  }
+
+  private waterActors(): WaterActor[] {
+    return this.actors.filter(
+      (actor): actor is WaterActor => actor instanceof WaterActor
+    );
   }
 
   /**
@@ -790,6 +815,7 @@ export class EditorScene extends Scene {
 
     context.save();
     this.camera.setTransforms(context);
+    this.painter.draw(context, this.camera, this.waterActors());
     Debug.draw(context);
     context.restore();
   }

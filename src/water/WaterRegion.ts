@@ -220,6 +220,12 @@ export class WaterRegion {
   public readonly ripples: RippleField;
 
   /**
+   * The current depth and flow, a single value is a grid with 1 cell
+   */
+  public depthGrid: WaterGrid<number> = [[1]];
+  public flowGrid: WaterGrid<vec2> = [[vec2()]];
+
+  /**
    * RGBA data for the depth and flow grids, the version numbers are changed
    * whenever the data changes
    */
@@ -232,7 +238,6 @@ export class WaterRegion {
   public maskVersion: number = 0;
 
   private system: WaterSystem;
-  private depthGrid: WaterGrid<number> = [[1]];
   private shape: Uint8Array | null = null;
   private rainTime: number = 0;
   private moveCallbacks: ((position: vec2) => void)[] = [];
@@ -296,13 +301,14 @@ export class WaterRegion {
    * Change which way the water flows
    */
   public setFlow(flow: vec2 | WaterGrid<vec2>) {
-    const grid = Array.isArray(flow) ? flow : [[flow]];
-    const rows = grid.length;
-    const columns = grid[0].length;
+    this.flowGrid = Array.isArray(flow) ? flow : [[flow]];
+
+    const rows = this.flowGrid.length;
+    const columns = this.flowGrid[0].length;
     const data = new Uint8Array(rows * columns * 4);
 
     // 128 is used for 0 so that still water stays perfectly still
-    grid.forEach((row, y) =>
+    this.flowGrid.forEach((row, y) =>
       row.forEach((value, x) => {
         data[(x + y * columns) * 4] = Math.round(value.x * 127) + 128;
         data[(x + y * columns) * 4 + 1] = Math.round(value.y * 127) + 128;

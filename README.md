@@ -73,6 +73,17 @@ Click on something to select it, its settings will appear in the menu. If severa
 
 The "Lighting", "Reflections", and "Water" folders have settings for the whole scene. The strengths in the "Reflections" folder are multiplied by the strength of each reflection, so they can be used to compare a scene with and without reflections.
 
+The "Paint water" folder is for painting depth and flow. While a paint mode is on, dragging paints onto any water underneath the brush instead of moving things, so turn it off again to go back to selecting elements.
+
+| Paint mode | Action | Shown as |
+| --- | --- | --- |
+| Depth | Hold the mouse down to raise or lower the depth, "Depth tool" chooses which one | A coloured grid, from yellow at the shore to dark blue in the deepest water |
+| Flow | Drag the mouse in the direction you want the water to flow, moving faster makes the flow stronger | A vector field with an arrow for each cell |
+
+Water starts with the depth and flow from its settings, and they're copied into a grid the first time you paint. Painted grids are saved with the scene. The depth and flow settings are replaced by a button for clearing the painted grid while the water has one.
+
+"Grid cell size" in the "Water" folder sets the size of the cells for all of the water in the scene. Changing it or resizing the water will interpolate the painted grids to fit, and they aren't changed until you paint on them so no detail is lost by trying out a different size.
+
 "Export scene to a file" downloads the current scene as a JSON file, and "Import scene from a file" loads it again. Scenes that were exported from older versions can still be imported.
 
 ## Project structure
@@ -347,7 +358,13 @@ world.addWater({
 });
 ```
 
-`region.setDepth()` and `region.setFlow()` will replace a grid at any time.
+`region.setDepth()` and `region.setFlow()` will replace a grid at any time, and `region.depthGrid` and `region.flowGrid` contain the current values.
+
+If you're making grids in an editor, the `gridCellSize` option of the `WaterSystem` gives all of your water the same size of cell. Use `world.water.gridSize(size)` to find the number of columns and rows for a region of that size:
+
+```ts
+const { x: columns, y: rows } = world.water.gridSize(vec2(384, 192));
+```
 
 Waves are moved along the flow using [flow maps](https://graphicsrunner.blogspot.com/2010/08/water-using-flow-maps.html). Moving a normal map too far stretches it, so there are 2 sets of waves half a cycle apart. Each one moves for a while and then fades out while it jumps back to the start, and some noise stops all of the water from fading at the same time.
 
@@ -411,6 +428,7 @@ const water = new WaterSystem({
 * `resolutionScale: number` the resolution of the water, this is the most effective option. If `pixelSize` is being used then this doesn't lose any detail as long as there's still at least one pixel for each `pixelSize`, for example 0.5 works well for a `pixelSize` of 1 and a camera scale of 2
 * `lightingMapScale: number` the resolution of the normal map that's given to the lighting system, the default is 0.5
 * `reflectionMapScale: number` the resolution of reflections in the water, the default is 0.5
+* `gridCellSize: number` the size of each cell in the depth and flow grids in world units, the default is 8
 
 `surfaceMapScale` on the `LightingSystem` also helps, because water makes the normal map and specular map larger.
 

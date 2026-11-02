@@ -24,6 +24,14 @@ export type WaterSystemOptions = {
      * faster
      */
     reflectionMapScale: number;
+    /**
+     * The size of each cell in the depth and flow grids, in world units
+     *
+     * Every region uses cells of this size, `gridSize()` will find the number of
+     * cells that a region needs. Lower values allow more detail but use more
+     * memory, and grids that have a different size are stretched to fit
+     */
+    gridCellSize: number;
 };
 /**
  * Renders water
@@ -78,6 +86,12 @@ export declare class WaterSystem {
      * Remove an area of water
      */
     remove(region: WaterRegion): void;
+    /**
+     * Find the number of columns and rows in a grid that covers an area of this
+     * size, the cells are stretched to fit if the size isn't a multiple of
+     * `gridCellSize`
+     */
+    gridSize(size: vec2): vec2;
     /**
      * Find the water at a world position, this is null if there isn't any
      */

@@ -165,6 +165,11 @@ export declare class WaterRegion {
     pixelSize: number;
     readonly ripples: RippleField;
     /**
+     * The current depth and flow, a single value is a grid with 1 cell
+     */
+    depthGrid: WaterGrid<number>;
+    flowGrid: WaterGrid<vec2>;
+    /**
      * RGBA data for the depth and flow grids, the version numbers are changed
      * whenever the data changes
      */
@@ -183,7 +188,6 @@ export declare class WaterRegion {
      */
     maskVersion: number;
     private system;
-    private depthGrid;
     private shape;
     private rainTime;
     private moveCallbacks;
